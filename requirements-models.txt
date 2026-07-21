@@ -1,5 +1,5 @@
 # Optional dependencies for modelling prompts.
-numpy>=1.26
+numpy>=2.5.1
 pandas>=2.2
 scikit-learn>=1.4
 statsmodels>=0.14
