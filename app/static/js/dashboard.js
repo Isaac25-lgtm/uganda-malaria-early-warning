@@ -517,6 +517,65 @@
     return observed.concat(forecast);
   }
 
+  function weeklyInterpretation(data) {
+    var observed = data.rows.filter(function (row) { return row.period === "observed" && isNumber(row.actual_cases); });
+    var forecasts = data.rows.filter(function (row) { return row.period === "forecast"; });
+    var latest = observed.length ? observed[observed.length - 1] : null;
+    var target = forecasts.length ? forecasts[forecasts.length - 1] : null;
+    if (!target || !isNumber(target.predicted_cases)) {
+      return "A figure-specific interpretation is unavailable because the selected forecast output is missing.";
+    }
+
+    var national = data.scope === "national";
+    var place = national ? "Uganda" : (data.district_name || "the selected district");
+    var opening = national ? "Across Uganda" : "For " + place;
+    var latestText = latest
+      ? "the green line shows confirmed malaria cases already reported, with the latest observed value being " +
+        num(latest.actual_cases) + " cases in " + latest.week_label + "."
+      : "the green line shows confirmed malaria cases already reported, although the latest observed value is unavailable.";
+    var targetLabel = target.week_label || data.target_label || "the selected target week";
+    var horizon = isNumber(data.forecast_horizon_weeks) ? num(data.forecast_horizon_weeks) + " weeks" : "the selected number of weeks";
+    var forecastText = (data.count_model_name || "The selected model") + " forecasts " + num(target.predicted_cases) +
+      " cases for " + targetLabel + ", " + horizon + " after issue week " + (data.issue_label || "the selected issue week") + ".";
+
+    var thresholdText;
+    if (isNumber(target.surge_threshold)) {
+      var difference = Number(target.predicted_cases) - Number(target.surge_threshold);
+      var benchmarkOwner = national ? "the combined district" : place + "'s seasonal";
+      thresholdText = "The red X marks " + benchmarkOwner + " surge threshold of " + num(target.surge_threshold) +
+        " cases for that same target week. ";
+      if (difference > 0) {
+        thresholdText += "The forecast is therefore " + num(Math.abs(difference)) +
+          " cases above the threshold, which supports early review, but does not by itself confirm an outbreak.";
+      } else if (difference < 0) {
+        thresholdText += "The forecast is therefore " + num(Math.abs(difference)) +
+          " cases below the threshold. This means the expected burden remains below the usual high-season benchmark, although malaria cases are still expected and routine monitoring should continue.";
+      } else {
+        thresholdText += "The forecast is exactly at the threshold, which supports early review, but does not by itself confirm an outbreak.";
+      }
+    } else {
+      thresholdText = "A seasonal surge threshold is unavailable for this target, so the forecast cannot be compared with the usual high-season benchmark.";
+    }
+
+    var rangeText = state.range === "all" ? "all available reported weeks" : "the last " + state.range + " reported weeks";
+    var historyText = "This chart displays " + rangeText +
+      "; changing this view changes only the amount of history shown and does not alter the forecast, threshold, or risk assessment.";
+    var intervalText;
+    if (data.intervals_available && isNumber(target.prediction_interval_lower) && isNumber(target.prediction_interval_upper)) {
+      intervalText = "The published prediction interval runs from " + num(target.prediction_interval_lower) + " to " +
+        num(target.prediction_interval_upper) + " cases, showing the uncertainty around the blue forecast point.";
+    } else {
+      intervalText = (data.count_model_name || "The selected model") +
+        " does not provide a validated prediction interval for this output, so the blue diamond is a point forecast rather than a guaranteed exact count.";
+    }
+    var aggregationText = national
+      ? "The Uganda forecast and threshold are sums of the district values; each district retains its own seasonal benchmark."
+      : "All figures in this paragraph refer only to " + place + ".";
+
+    return opening + ", " + latestText + " " + forecastText + " " + thresholdText + " " +
+      historyText + " " + intervalText + " " + aggregationText;
+  }
+
   function renderWeekly(data) {
     state.weekly = data;
     var badge = $("weekly-model-badge");
@@ -674,11 +733,7 @@
     show($("weekly-chart").parentNode, true);
     setState("weekly-state", "", null);
 
-    var note = [];
-    note.push(data.threshold_note);
-    note.push(data.intervals_note);
-    if (data.scope === "national" && data.national_threshold_note) note.push(data.national_threshold_note);
-    $("weekly-note").textContent = note.filter(Boolean).join(" ");
+    $("weekly-note").textContent = weeklyInterpretation(data);
   }
 
   function weeklyError(err) {
@@ -745,6 +800,82 @@
     );
   }
 
+  function escapeHtml(value) {
+    return String(value === null || value === undefined ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function isNumber(value) {
+    return value !== null && value !== undefined && value !== "" && isFinite(Number(value));
+  }
+
+  function riskLevelInterpretation(level) {
+    if (level === "Low") return "This is below the district's usual high-season level.";
+    if (level === "Moderate") return "This is close to the district's usual high-season level.";
+    if (level === "High") return "This meets or exceeds the district's usual high-season level and should prompt early review.";
+    if (level === "Very High") return "This is far above the district's usual high-season level and should prompt early review.";
+    return "A risk level cannot be assigned because the required forecast or benchmark is unavailable.";
+  }
+
+  function scoreInterpretation(score) {
+    if (!isNumber(score)) return "The difference from the seasonal benchmark is unavailable.";
+    var amount = num(Math.abs(Number(score)));
+    if (Number(score) > 0) return "This is " + amount + " cases above the benchmark.";
+    if (Number(score) < 0) return "This is " + amount + " cases below the benchmark.";
+    return "This is exactly at the benchmark.";
+  }
+
+  function trendInterpretation(row) {
+    var trend = TREND_LABEL[row.trend] || "Unknown";
+    if (trend === "Unknown") return "The recent week-to-week trend is unavailable.";
+    return "The recent reporting trend is " + trend.toLowerCase() + ", comparing the latest reported week with the week before.";
+  }
+
+  function completenessInterpretation(value) {
+    if (!isNumber(value)) return "Reporting completeness is unavailable for the latest reported week.";
+    var received = pct(value);
+    if (Number(value) >= 100) return "Completeness is " + received + ", meaning all expected reports were received for the latest reported week.";
+    return "Completeness is " + received + ", meaning some expected reports were not received for the latest reported week.";
+  }
+
+  function riskInterpretationHtml(row) {
+    var district = escapeHtml(row.district_name || "This district");
+    var horizon = isNumber(row.forecast_horizon_weeks) ? num(row.forecast_horizon_weeks) + " weeks" : "the selected horizon";
+    if (row.no_data || !isNumber(row.predicted_cases) || !isNumber(row.threshold_used)) {
+      return '<p class="risk-interpretation"><strong>' + district + '.</strong> A district-specific interpretation is unavailable because the forecast or seasonal benchmark needed for this assessment is missing.</p>';
+    }
+
+    var countModel = row.count_model_name || "The selected count model";
+    var surgeModel = row.surge_model_name || "the selected risk model";
+    var predicted = num(row.predicted_cases);
+    var riskCases = num(row.surge_predicted_cases);
+    var modelSentence;
+    if (countModel === surgeModel) {
+      modelSentence = escapeHtml(countModel) + " produced both the displayed forecast and the risk-assessment figure, so both are " + riskCases + " cases.";
+    } else {
+      modelSentence = escapeHtml(countModel) + " forecast " + predicted + " cases; " + escapeHtml(surgeModel) + " supplied the risk-assessment figure of " + riskCases + " cases.";
+    }
+
+    return '<p class="risk-interpretation"><strong>' + district + ".</strong> The dashboard forecasts " + predicted +
+      " confirmed malaria cases for " + horizon + " after the issue week. " + modelSentence +
+      " The district's seasonal surge threshold is " + num(row.threshold_used) + " cases. " +
+      scoreInterpretation(row.predicted_surge_score) + " The risk level is <strong>" + escapeHtml(row.risk_level || "No data") +
+      "</strong>. " + riskLevelInterpretation(row.risk_level) + " " + trendInterpretation(row) + " " +
+      completenessInterpretation(row.reporting_completeness) +
+      " A High or Very High result supports early review; it does not confirm an outbreak.</p>";
+  }
+
+  function paintRiskInterpretations(rows) {
+    var container = $("risk-note");
+    if (!container) return;
+    var title = '<h3 id="risk-interpretations-title">District interpretations</h3>';
+    container.innerHTML = title + rows.map(riskInterpretationHtml).join("");
+  }
+
   function paintRiskTable() {
     // Sort and search the COMPLETE set first, then slice the current page.
     var rows = sortedRows();
@@ -752,6 +883,7 @@
     if (!rows.length) {
       body.innerHTML = "";
       show($("risk-table").parentNode, false);
+      paintRiskInterpretations([]);
       updatePager(0, 0);
       setState("risk-state", state.search ? "No district matches this search." : MSG_NO_DATA, "empty");
       return;
@@ -767,6 +899,7 @@
     show($("risk-table").parentNode, true);
     setState("risk-state", "", null);
     updatePager(rows.length, pageCount, start, pageRows.length);
+    paintRiskInterpretations(pageRows);
   }
 
   function updatePager(total, pageCount, start, shown) {
@@ -797,7 +930,7 @@
     // model produced a column. The label lives inside the sort button, so update
     // only the label span and leave the button intact.
     setHeaderLabel("th-predicted", "Predicted cases", countModel);
-    setHeaderLabel("th-surge-cases", "Surge-model cases", surgeModel);
+    setHeaderLabel("th-surge-cases", "Risk-assessment cases", surgeModel);
     setHeaderLabel("th-risk", "Risk level", surgeModel);
 
     // New data set: start at the first page.
@@ -819,12 +952,6 @@
         : "Predicted cases from " + countModel + "; risk assessment from " + surgeModel + ". These are different models and are not combined.") +
       (summary ? " " + summary + "." : "");
 
-    var note = [data.score_definition, data.threshold_method_note, data.risk_assessment_note];
-    if (!data.surge_probability_available) {
-      note.unshift("No trained surge probability exists in these outputs, so risk is a count-threshold assessment.");
-    }
-    $("risk-note").textContent = note.filter(Boolean).join(" ");
-
     paintRiskTable();
   }
 
@@ -834,7 +961,7 @@
     show($("risk-table").parentNode, false);
     setState("risk-state", describeError(err, "risk"), "error");
     $("risk-subhead").textContent = "";
-    $("risk-note").textContent = "";
+    paintRiskInterpretations([]);
   }
 
   // ---- map --------------------------------------------------------------

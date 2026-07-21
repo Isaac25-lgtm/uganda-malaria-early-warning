@@ -92,8 +92,8 @@ THRESHOLD_METHOD_NOTE = (
 )
 NATIONAL_AGGREGATION_NOTE = "National view sums district values; it is not a national re-estimate."
 NATIONAL_THRESHOLD_NOTE = (
-    "National benchmark is the sum of the district thresholds, so it matches the "
-    "summed prediction on the same basis. It is not a nationally re-estimated threshold."
+    "In the Uganda view, the forecast and benchmark are sums across districts. "
+    "Each district still uses its own seasonal benchmark."
 )
 
 
@@ -692,6 +692,12 @@ def build_weekly_series_section(params: DashboardParams) -> dict[str, Any]:
     count_name = models["count"]["model_name"]
     surge_name = models["surge"]["model_name"]
     week_start = _issue_week_start(params)
+    target = _target_week(params, count_name)
+
+    district_name = None
+    if params.district_id:
+        reference = DistrictReference.query.filter_by(district_id=params.district_id).first()
+        district_name = reference.district_name if reference else params.district_id
 
     observed_query = DistrictWeekFeature.query.with_entities(
         DistrictWeekFeature.epi_year,
@@ -809,8 +815,8 @@ def build_weekly_series_section(params: DashboardParams) -> dict[str, Any]:
         "forecast_rows": sum(1 for row in rows if row["period"] == "forecast"),
         "intervals_available": intervals_available,
         "intervals_note": (
-            f"{count_name} does not publish prediction intervals for this horizon, so none are drawn. "
-            "No interval is estimated or borrowed from another model."
+            f"This chart shows the selected target week only. {count_name} does not "
+            "provide a prediction range for this forecast."
         )
         if not intervals_available
         else f"Prediction intervals are published by {count_name} for this horizon.",
@@ -818,9 +824,15 @@ def build_weekly_series_section(params: DashboardParams) -> dict[str, Any]:
         "surge_model_name": surge_name,
         "threshold_model_name": surge_name,
         "selected_models": models,
+        "forecast_horizon_weeks": params.horizon,
+        "district_id": params.district_id,
+        "district_name": district_name,
+        "target_label": target.get("target_label"),
         "threshold_note": (
-            "The threshold is shown only at forecast target weeks. Historical weekly "
-            "thresholds are not stored, so no historical threshold line is drawn."
+            "Green shows confirmed cases already reported. The blue diamond is the "
+            "model's expected cases for the target week. The red X is the seasonal "
+            "surge benchmark for that same week. A forecast above the benchmark needs "
+            "early review; it does not confirm an outbreak."
         ),
         "threshold_method_note": THRESHOLD_METHOD_NOTE,
         "national_threshold_note": NATIONAL_THRESHOLD_NOTE if params.is_national else None,

@@ -267,6 +267,17 @@ class DashboardFrontendAssetTests(unittest.TestCase):
         # Forecast dataset shows a point (showLine false / single target), never a joined line.
         self.assertIn("Intermediate weekly forecasts are not", self.template)
 
+    def test_weekly_chart_uses_figure_specific_interpretation(self):
+        self.assertIn("function weeklyInterpretation(data)", self.script)
+        self.assertIn("target.predicted_cases", self.script)
+        self.assertIn("target.surge_threshold", self.script)
+        self.assertIn("cases above the threshold", self.script)
+        self.assertIn("cases below the threshold", self.script)
+        self.assertIn("data.district_name", self.script)
+        self.assertIn("state.range", self.script)
+        self.assertIn("point forecast rather than a guaranteed exact count", self.script)
+        self.assertNotIn("note.push(data.threshold_note)", self.script)
+
     # ---- Phase 29A corrective pass ------------------------------------
     def test_latest_request_wins_uses_generation_and_abort(self):
         # Defect 1: monotonic generation + AbortController + aborted handling.
@@ -289,6 +300,26 @@ class DashboardFrontendAssetTests(unittest.TestCase):
         self.assertIn("rows.slice(start, start + state.pageSize)", self.script)
         # Filter/search/sort reset to page one.
         self.assertGreaterEqual(self.script.count("state.page = 1"), 3)
+
+    def test_risk_table_generates_a_district_specific_interpretation_for_each_visible_row(self):
+        for phrase in (
+            "Risk-assessment cases",
+            "Surge threshold",
+            "Surge score",
+            "Completeness",
+            "how many weeks ahead the forecast refers to",
+        ):
+            self.assertIn(phrase, self.template, phrase)
+        self.assertIn('id="risk-interpretations-title"', self.template)
+        self.assertIn("function riskInterpretationHtml(row)", self.script)
+        self.assertIn("rows.map(riskInterpretationHtml)", self.script)
+        self.assertIn("The dashboard forecasts", self.script)
+        self.assertIn("seasonal surge threshold", self.script)
+        self.assertIn("Completeness is", self.script)
+        self.assertIn("A High or Very High result supports early review", self.script)
+        self.assertNotIn("How to read each row:", self.script)
+        self.assertNotIn("Agago's usual high-season", self.script)
+        self.assertNotIn("No trained surge probability exists", self.script)
 
     def test_sortable_headers_are_real_buttons_for_keyboard(self):
         # Defect 3: <button> inside each sortable th; aria-sort stays on th.
@@ -515,6 +546,22 @@ class DashboardSectionTests(DashboardDatabaseTestCase):
         for row in section["rows"]:
             if row["period"] == "observed":
                 self.assertIsNone(row["surge_threshold"])
+
+    def test_weekly_chart_notes_explain_observed_forecast_and_threshold(self):
+        national = build_weekly_series_section(resolve_params(horizon=4))
+        self.assertIn("Green shows confirmed cases", national["threshold_note"])
+        self.assertIn("blue diamond", national["threshold_note"])
+        self.assertIn("red X", national["threshold_note"])
+        self.assertIn("does not confirm an outbreak", national["threshold_note"])
+        self.assertIn("sums across districts", national["national_threshold_note"])
+        self.assertIn("does not provide a prediction range", national["intervals_note"])
+        self.assertEqual(national["forecast_horizon_weeks"], 4)
+        self.assertEqual(national["target_label"], "2026W04")
+        self.assertIsNone(national["district_name"])
+
+        district = build_weekly_series_section(resolve_params(horizon=4, district_id="UGA_AGAGO"))
+        self.assertEqual(district["district_name"].upper(), "AGAGO")
+        self.assertEqual(district["target_label"], "2026W04")
 
     def test_district_filter_changes_summary_weekly_risk_and_climate(self):
         national = resolve_params(horizon=4)

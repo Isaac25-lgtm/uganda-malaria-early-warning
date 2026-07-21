@@ -193,12 +193,13 @@
         <input class="input input-sm" id="risk-search" type="search" placeholder="Search district&hellip;" autocomplete="off">
       </div>
     </header>
-    <p class="panel-lead">Ranks districts by forecast risk for the selected horizon. Predicted counts and surge risk may come from different validated models. They are displayed together for interpretation but are not combined into one model.</p>
+    <p class="panel-lead">Each row shows the expected malaria cases for one district at the selected future week, compared with that district's own seasonal benchmark.</p>
     <div class="how-note" id="risk-how" hidden>
-      Risk level comes from the selected surge model, comparing its predicted cases with a district
-      threshold built only from that district's history up to the issue week. The surge score is a
-      difference in cases (predicted cases minus threshold), not a probability. Sort any column; search
-      by district name.
+      <p><strong>District:</strong> the place being assessed.</p>
+      <p><strong>Risk level:</strong> Low means the forecast is well below the usual high-season level; Moderate means it is close to that level; High means it meets or exceeds it; Very High means it is far above it. A high level prompts review; it does not confirm an outbreak.</p>
+      <p><strong>Predicted cases:</strong> the model's expected number of cases at the selected future week. <strong>Risk-assessment cases:</strong> the forecast used to assign the risk level. It matches predicted cases when the same model is selected for both tasks.</p>
+      <p><strong>Surge threshold:</strong> the district's usual high-case benchmark for that time of year. <strong>Surge score:</strong> how far the risk-assessment forecast is above or below that benchmark in cases. A positive score is above it; a negative score is below it.</p>
+      <p><strong>Trend:</strong> whether reported cases in the latest available week rose, fell or stayed similar to the week before. <strong>Completeness:</strong> the percentage of expected health-facility reports received for that latest week. <strong>Horizon:</strong> how many weeks ahead the forecast refers to.</p>
     </div>
     <p class="panel-subhead" id="risk-subhead"></p>
     <div class="panel-body">
@@ -209,7 +210,7 @@
               <th class="sortable" data-key="district_name" data-type="text" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">District</span><span class="th-arrow" aria-hidden="true"></span></button></th>
               <th class="sortable" data-key="risk_rank" data-type="number" aria-sort="none" id="th-risk"><button type="button" class="th-sort"><span class="th-label">Risk level</span><span class="th-arrow" aria-hidden="true"></span></button></th>
               <th class="sortable" data-key="predicted_cases" data-type="number" aria-sort="none" id="th-predicted"><button type="button" class="th-sort"><span class="th-label">Predicted cases</span><span class="th-arrow" aria-hidden="true"></span></button></th>
-              <th class="sortable" data-key="surge_predicted_cases" data-type="number" aria-sort="none" id="th-surge-cases"><button type="button" class="th-sort"><span class="th-label">Surge-model cases</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+              <th class="sortable" data-key="surge_predicted_cases" data-type="number" aria-sort="none" id="th-surge-cases"><button type="button" class="th-sort"><span class="th-label">Risk-assessment cases</span><span class="th-arrow" aria-hidden="true"></span></button></th>
               <th class="sortable" data-key="threshold_used" data-type="number" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Surge threshold</span><span class="th-arrow" aria-hidden="true"></span></button></th>
               <th class="sortable" data-key="predicted_surge_score" data-type="number" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Surge score</span><span class="th-arrow" aria-hidden="true"></span></button></th>
               <th class="sortable" data-key="trend" data-type="text" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Trend</span><span class="th-arrow" aria-hidden="true"></span></button></th>
@@ -226,7 +227,9 @@
         <span class="pager-status" id="risk-page-status" role="status" aria-live="polite"></span>
         <button type="button" class="pager-btn" id="risk-next">Next &rarr;</button>
       </nav>
-      <p class="panel-src" id="risk-note"></p>
+      <section class="risk-interpretations" id="risk-note" aria-live="polite" aria-labelledby="risk-interpretations-title">
+        <h3 id="risk-interpretations-title">District interpretations</h3>
+      </section>
     </div>
   </article>
 </section>

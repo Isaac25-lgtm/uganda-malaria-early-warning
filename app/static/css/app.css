@@ -312,6 +312,18 @@ h1, h2, h3 { margin: 0; font-weight: 600; color: var(--ink); }
 .table-scroll-tall + .state-block,
 .table-scroll-tall ~ .panel-src { margin-top: 12px; }
 
+/* Plain-language readings follow the visible risk-table rows; they are not cards. */
+.risk-interpretations {
+  margin-top: 16px; border-top: 1px solid var(--border-soft); color: var(--ink-2);
+}
+.risk-interpretations h3 {
+  margin: 14px 0 0; font-size: 13px; color: var(--ink); font-weight: 650;
+}
+.risk-interpretation {
+  margin: 0; padding: 11px 0; font-size: 12px; line-height: 1.6;
+  border-bottom: 1px solid var(--border-soft);
+}
+
 /* ---- Footer ----------------------------------------------------------- */
 .app-footer {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
