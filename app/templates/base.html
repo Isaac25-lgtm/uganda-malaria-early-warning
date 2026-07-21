@@ -68,8 +68,11 @@
             {{ current_user.role if current_user.is_authenticated else 'Guest' }}
           </span>
         </div>
-        <a class="profile-logout" href="{{ url_for('auth.logout') }}" title="Sign out"
-           aria-label="Sign out">{{ icons.icon('logout') }}</a>
+        <form class="profile-logout-form" method="post" action="{{ url_for('auth.logout') }}">
+          {{ logout_form.hidden_tag() }}
+          <button class="profile-logout" type="submit" title="Sign out"
+                  aria-label="Sign out">{{ icons.icon('logout') }}</button>
+        </form>
       </div>
     </header>
 

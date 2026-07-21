@@ -17,6 +17,19 @@ class ConfigError(RuntimeError):
     """Raised when required configuration is missing or invalid."""
 
 
+def resolve_bool_env(name: str, *, default: bool) -> bool:
+    """Read a conventional boolean environment variable or fail clearly."""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ConfigError(f"{name} must be true or false.")
+
+
 def resolve_database_url() -> str:
     """Return a validated PostgreSQL URL from the environment, or raise."""
     url = os.environ.get("DATABASE_URL")
@@ -95,3 +108,7 @@ class Config:
         """Populate secret + database settings, failing fast if invalid."""
         app.config["SQLALCHEMY_DATABASE_URI"] = resolve_database_url()
         app.config["SECRET_KEY"] = resolve_secret_key()
+        app.config["SESSION_COOKIE_SECURE"] = resolve_bool_env(
+            "SESSION_COOKIE_SECURE", default=False
+        )
+        app.config["REMEMBER_COOKIE_SECURE"] = app.config["SESSION_COOKIE_SECURE"]

@@ -13,7 +13,7 @@
   <img alt="Districts" src="https://img.shields.io/badge/districts-146-0e4d4d">
   <img alt="Horizons" src="https://img.shields.io/badge/horizons-4%20%7C%208%20%7C%2012%20weeks-176a63">
   <img alt="Models" src="https://img.shields.io/badge/approved%20models-4-0d9488">
-  <img alt="Tests" src="https://img.shields.io/badge/tests-400%20passing-16a34a">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-automated-16a34a">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12-3776ab">
   <img alt="Status" src="https://img.shields.io/badge/status-research%20prototype-ea580c">
 </p>
@@ -41,9 +41,10 @@ At the four-week horizon the model detects **73% of surge weeks** and cuts forec
 districts presently build endemic channels manually in Excel, with no climate input and no
 forecast; this system automates that baseline and extends it three months ahead.
 
-Everything is reproducible and auditable: 400 automated tests, a deterministic SHA-256
-integrity fingerprint over the published forecasts, and no analytical value hardcoded in the
-interface.
+The analytical workflow is auditable in source and protected by automated tests and a
+deterministic SHA-256 integrity fingerprint over the published forecasts. Complete result
+reproduction additionally requires the governed surveillance data and production artifacts,
+which cannot be redistributed in this public repository.
 
 ---
 
@@ -114,7 +115,7 @@ This work contributes:
 7. **An empirical operational finding** — dedicated class-balanced classifiers produced
    excessive false alerts on this dataset; a count-versus-seasonal-threshold rule proved more
    operationally balanced. All classifier results are retained rather than discarded.
-8. **An end-to-end reproducible system** — surveillance quality, climate integration,
+8. **An end-to-end auditable system** — surveillance quality, climate integration,
    explainability, governance, reporting and a district dashboard in one auditable application.
 
 ---
@@ -123,12 +124,12 @@ This work contributes:
 
 | Source | Variable | Unit / resolution |
 | --- | --- | --- |
-| **DHIS2 HMIS 033b** | Confirmed malaria cases (`fUflbWWhouR`, code `033B-CD01a`) | District-week counts |
+| **DHIS2 HMIS 033b** | Confirmed malaria cases (approved HMIS 033b data element) | District-week counts |
 | **DHIS2 HMIS 033b** | Facility reporting completeness | Percentage of expected reports |
 | **CHIRPS** | Rainfall | Millimetres, weekly total, district polygon mean |
 | **ERA5-Land** | Temperature | Degrees Celsius, weekly mean |
 | **ERA5-Land** | Relative humidity | Percent, derived from temperature and dewpoint |
-| **UBOS** | District boundaries and population denominators | Administrative polygons; 2024 denominators |
+| **UBOS** | District boundaries | Administrative polygons |
 
 Climate rasters are aggregated to district polygons and aligned to epidemiological weeks.
 Wind speed is **not** used, and no negative binomial specification is included; both
@@ -324,6 +325,9 @@ The application fails fast if `DATABASE_URL` is missing or is not a PostgreSQL U
 requires `SECRET_KEY` outside local development.
 
 DHIS2 credentials do not belong in `.env` — they are entered at sign-in.
+The configured DHIS2 URL must use HTTPS and certificate verification must remain enabled.
+Set `SESSION_COOKIE_SECURE=true` when serving the dashboard to browsers over HTTPS; leave it
+false only for the default localhost HTTP workflow.
 
 **Authentication.** Sign-in verifies your DHIS2 account live against `/api/me` and keeps only
 the returned non-secret identity for the browser session, with reauthentication after 30
@@ -334,12 +338,21 @@ production issue week.
 
 ## 9. Testing and verification
 
+The public source-only gate requires no private database or unpublished artifacts:
+
 ```bash
 python -m compileall app tests
+python -m unittest -v tests.test_dhis2_client tests.test_modelling_dataset tests.test_model_performance tests.test_repository_hardening
+```
+
+Authorized maintainers with the governed PostgreSQL database and complete local `data/`
+directory can run the full verification suite:
+
+```bash
 python -m unittest discover -s tests -v
 ```
 
-The suite comprises **400 tests across 26 modules**, covering analytical contracts,
+The full suite covers analytical contracts,
 authentication and session security, API response contracts, export security (formula
 injection, path traversal, temporary-file cleanup), read-only database behaviour,
 scientific-honesty assertions and production-integrity fingerprinting.
@@ -347,8 +360,9 @@ scientific-honesty assertions and production-integrity fingerprinting.
 Production integrity is verified by a deterministic SHA-256 forecast fingerprint recomputed on
 demand, together with row, district, null, duplicate and composite-key checks.
 
-> Tests requiring the database and research artifacts will skip or fail without a local
-> PostgreSQL instance and the unpublished `data/` directory (see below).
+> Database- and artifact-backed tests intentionally fail closed when required governed
+> evidence is missing. Passing the public source-only gate is therefore not evidence that the
+> private production outputs were reproduced.
 
 ---
 
@@ -381,8 +395,9 @@ the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/) (ERA5-La
   submission, not malaria burden.
 - **Association, not causation.** Climate variables are predictive inputs. The pipeline
   computes no climate–malaria correlation and claims no causal effect or best-correlating lag.
-- **Fixed population denominators.** UBOS 2024 district denominators are applied across the
-  2020–2025 period because year-specific district projections are not part of the dataset.
+- **Count rather than incidence.** The model predicts weekly confirmed case counts. Population
+  and incidence are not outcomes or predictors in the production modelling contract, so
+  comparisons between differently sized districts require epidemiological interpretation.
 - **Target-week only.** Models predict the specified target week; intermediate weekly forecasts
   are not generated, and no prediction interval is displayed unless the selected model
   publishes one.
@@ -407,13 +422,18 @@ external validation in an operational setting.
 
 ## 12. Ethics and responsible use
 
-This system was developed for academic research. It processes aggregate district-week counts
-and contains no patient-identifiable information, so no individual-level ethical approval was
-required.
+This system was developed for academic research and processes aggregate district-week counts;
+no patient-identifiable records are stored in this repository. Data-custodian authorization,
+institutional ethics review and any waiver or exemption must nevertheless be determined and
+documented by the Uganda Ministry of Health and the relevant university review bodies. The
+repository itself does not establish an ethics exemption.
 
 Forecasts are decision-support outputs: a risk classification identifies districts warranting
 review and early action, and is intended to inform epidemiological judgement rather than
 replace it or trigger automated action.
+
+Use of Ministry of Health identifiers and branding describes the data custodian and research
+context; it does not by itself imply official endorsement of this prototype.
 
 ---
 

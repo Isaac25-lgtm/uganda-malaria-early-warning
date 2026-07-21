@@ -9,7 +9,7 @@ import os
 import time
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 import requests
 
@@ -62,16 +62,38 @@ class DHIS2Config:
 
 
 def normalize_base_url(base_url: str) -> str:
-    """Normalize the base URL so endpoint joins do not create double slashes."""
+    """Return a credential-safe HTTPS base URL for DHIS2 API requests."""
     cleaned = base_url.strip().rstrip("/")
     if not cleaned:
         raise DHIS2ConfigError("DHIS2_BASE_URL is required.")
-    if not cleaned.startswith(("http://", "https://")):
-        raise DHIS2ConfigError("DHIS2_BASE_URL must start with http:// or https://.")
+    if any(character.isspace() for character in cleaned):
+        raise DHIS2ConfigError("DHIS2_BASE_URL must not contain whitespace.")
+
+    parsed = urlsplit(cleaned)
+    if parsed.scheme.lower() != "https":
+        raise DHIS2ConfigError(
+            "DHIS2_BASE_URL must use https:// because login credentials are "
+            "sent to DHIS2 for verification."
+        )
+    if not parsed.hostname:
+        raise DHIS2ConfigError("DHIS2_BASE_URL must include a valid host name.")
+    if parsed.username is not None or parsed.password is not None:
+        raise DHIS2ConfigError(
+            "DHIS2_BASE_URL must not contain embedded credentials."
+        )
+    if parsed.query or parsed.fragment:
+        raise DHIS2ConfigError(
+            "DHIS2_BASE_URL must not contain a query string or fragment."
+        )
     return cleaned
 
 
-def parse_bool_env(value: str | None, *, default: bool = True) -> bool:
+def parse_bool_env(
+    value: str | None,
+    *,
+    default: bool = True,
+    name: str = "DHIS2_VERIFY_SSL",
+) -> bool:
     if value is None or value.strip() == "":
         return default
     normalized = value.strip().lower()
@@ -79,7 +101,7 @@ def parse_bool_env(value: str | None, *, default: bool = True) -> bool:
         return True
     if normalized in {"false", "f", "no", "n", "0"}:
         return False
-    raise DHIS2ConfigError("DHIS2_VERIFY_SSL must be true or false.")
+    raise DHIS2ConfigError(f"{name} must be true or false.")
 
 
 def format_week_period(year: int, week: int) -> str:
@@ -115,12 +137,22 @@ def load_dhis2_config(username: str, password: str) -> DHIS2Config:
     if timeout_seconds <= 0:
         raise DHIS2ConfigError("DHIS2_TIMEOUT_SECONDS must be greater than zero.")
 
+    verify_ssl = parse_bool_env(
+        os.environ.get("DHIS2_VERIFY_SSL"),
+        default=True,
+        name="DHIS2_VERIFY_SSL",
+    )
+    if not verify_ssl:
+        raise DHIS2ConfigError(
+            "DHIS2_VERIFY_SSL must remain true for credential-bearing requests."
+        )
+
     return DHIS2Config(
         base_url=normalize_base_url(base_url),
         username=username.strip(),
         password=password,
         timeout_seconds=timeout_seconds,
-        verify_ssl=parse_bool_env(os.environ.get("DHIS2_VERIFY_SSL"), default=True),
+        verify_ssl=verify_ssl,
     )
 
 

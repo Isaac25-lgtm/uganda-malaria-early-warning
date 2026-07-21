@@ -26,18 +26,18 @@
       {% endif %}
     {% endwith %}
 
-    <form method="post" novalidate class="auth-form" autocomplete="off">
+    <form method="post" novalidate class="auth-form">
       {{ form.hidden_tag() }}
       <label class="field">
         <span class="field-label">{{ form.username.label.text }}</span>
-        {{ form.username(class="input", autofocus=true, autocomplete="off", spellcheck="false") }}
+        {{ form.username(class="input", autofocus=true, autocomplete="username", spellcheck="false") }}
         {% for error in form.username.errors %}
         <em class="field-error">{{ error }}</em>
         {% endfor %}
       </label>
       <label class="field">
         <span class="field-label">{{ form.password.label.text }}</span>
-        {{ form.password(class="input", autocomplete="off") }}
+        {{ form.password(class="input", autocomplete="current-password") }}
         {% for error in form.password.errors %}
         <em class="field-error">{{ error }}</em>
         {% endfor %}

@@ -12,3 +12,7 @@ class LoginForm(FlaskForm):
         "DHIS2 password", validators=[DataRequired(), Length(max=1024)]
     )
     submit = SubmitField("Verify and sign in")
+
+
+class LogoutForm(FlaskForm):
+    """Empty form whose CSRF token protects the logout state change."""

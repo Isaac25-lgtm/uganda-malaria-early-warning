@@ -215,8 +215,9 @@ class SystemAuditTests(unittest.TestCase):
 
     def test_logout_requires_authentication_and_login_stays_public(self):
         anon = self.app.test_client()
-        # Logout is protected but redirects rather than returning JSON 401.
-        logout = anon.get("/auth/logout")
+        # Logout is a protected state-changing POST; GET cannot log a user out.
+        self.assertEqual(anon.get("/auth/logout").status_code, 405)
+        logout = anon.post("/auth/logout")
         self.assertEqual(logout.status_code, 302)
         self.assertIn("/auth/login", logout.headers["Location"])
         # The login page itself must remain reachable, or nobody could sign in.
@@ -288,6 +289,16 @@ class SystemAuditTests(unittest.TestCase):
         self.assertNotIn("debug=True", Path("run.py").read_text(encoding="utf-8"))
         map_bytes = len(self._client().get("/api/dashboard/map").data)
         self.assertLessEqual(map_bytes, 2_000_000, f"map response is {map_bytes} bytes")
+
+    def test_security_headers_cover_pages_and_apis(self):
+        client = self._client()
+        for url in ("/", "/api/dashboard/summary?horizon=4"):
+            response = client.get(url)
+            self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+            self.assertEqual(response.headers["X-Frame-Options"], "DENY")
+            self.assertEqual(response.headers["Referrer-Policy"], "same-origin")
+            self.assertIn("frame-ancestors 'none'", response.headers["Content-Security-Policy"])
+            self.assertIn("no-store", response.headers["Cache-Control"])
 
     def test_no_external_cdn_or_font_requests(self):
         for root in (Path("app/templates"), Path("app/static/js"), Path("app/static/css")):

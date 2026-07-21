@@ -130,11 +130,30 @@ class DHIS2AuthenticationTests(unittest.TestCase):
                 "/auth/login",
                 data={"username": "operator", "password": "operation-password"},
             )
-        response = client.get("/auth/logout", follow_redirects=False)
+        response = client.post("/auth/logout", follow_redirects=False)
         self.assertEqual(response.status_code, 302)
         with client.session_transaction() as stored:
             self.assertNotIn(DHIS2_IDENTITY_SESSION_KEY, stored)
             self.assertNotIn("_user_id", stored)
+
+    def test_logout_rejects_get_requests(self):
+        client = self.app.test_client()
+        self.assertEqual(client.get("/auth/logout").status_code, 405)
+
+    def test_logout_requires_a_valid_csrf_token(self):
+        client = self.app.test_client()
+        identity = self._identity()
+        with client.session_transaction() as stored:
+            stored[DHIS2_IDENTITY_SESSION_KEY] = identity.to_session()
+            stored["_user_id"] = identity.get_id()
+            stored["_fresh"] = True
+
+        self.app.config["WTF_CSRF_ENABLED"] = True
+        try:
+            response = client.post("/auth/logout", follow_redirects=False)
+        finally:
+            self.app.config["WTF_CSRF_ENABLED"] = False
+        self.assertEqual(response.status_code, 400)
 
     def test_cli_prompts_for_operation_scoped_credentials_and_closes_client(self):
         class FakeClient:

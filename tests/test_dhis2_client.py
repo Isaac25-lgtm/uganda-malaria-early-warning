@@ -48,6 +48,23 @@ class DHIS2ClientTests(unittest.TestCase):
             "https://hmis.example.org",
         )
 
+    def test_base_url_rejects_insecure_http(self):
+        with self.assertRaisesRegex(DHIS2ConfigError, "must use https"):
+            normalize_base_url("http://hmis.example.org")
+
+    def test_base_url_rejects_embedded_credentials(self):
+        with self.assertRaisesRegex(DHIS2ConfigError, "embedded credentials"):
+            normalize_base_url("https://analyst:secret@hmis.example.org")
+
+    def test_base_url_rejects_query_and_fragment(self):
+        for value in (
+            "https://hmis.example.org?token=secret",
+            "https://hmis.example.org#fragment",
+        ):
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(DHIS2ConfigError, "query string or fragment"):
+                    normalize_base_url(value)
+
     def test_missing_config_reports_required_names(self):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(DHIS2ConfigError) as ctx:
@@ -69,6 +86,18 @@ class DHIS2ClientTests(unittest.TestCase):
         self.assertIsNone(client.session.auth)
         self.assertEqual(client.config.username, "")
         self.assertEqual(client.config.password, "")
+
+    def test_config_rejects_disabled_tls_verification(self):
+        with patch.dict(
+            os.environ,
+            {
+                "DHIS2_BASE_URL": "https://hmis.example.org",
+                "DHIS2_VERIFY_SSL": "false",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(DHIS2ConfigError, "must remain true"):
+                load_dhis2_config("analyst", "operation-secret")
 
     def test_password_not_in_http_error(self):
         config = DHIS2Config(

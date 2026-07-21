@@ -1,0 +1,32 @@
+name: Source-only checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+      - name: Install core dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile Python sources
+        run: python -m compileall app tests
+      - name: Run source-only tests
+        run: >-
+          python -m unittest -v
+          tests.test_dhis2_client
+          tests.test_modelling_dataset
+          tests.test_model_performance
+          tests.test_repository_hardening

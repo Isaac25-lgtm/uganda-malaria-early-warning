@@ -1,12 +1,7 @@
-"""Application factory for the Malaria Early Warning Dashboard.
-
-Foundation stage only: wires configuration, extensions, authentication,
-blueprints and CLI. No research tables, DHIS2 extraction, climate ingestion,
-preprocessing, modelling or real dashboard data are implemented here.
-"""
+"""Application factory for the Malaria Early Warning Dashboard."""
 from __future__ import annotations
 
-from flask import Flask
+from flask import Flask, request
 
 from app.config import Config
 from app.extensions import db, login_manager, migrate
@@ -49,13 +44,14 @@ def create_app(config_class: type[Config] = Config) -> Flask:
     # environment (this call fails fast if DATABASE_URL is missing/invalid).
     app.config.from_object(config_class)
     config_class.init_runtime(app)
-    # Keep API payloads compact even when run.py enables Flask debug mode.
+    # Keep API payloads compact in development and production.
     app.json.compact = True
 
     _init_extensions(app)
     _register_blueprints(app)
     _register_cli(app)
     _register_context(app)
+    _register_security_headers(app)
 
     return app
 
@@ -107,6 +103,7 @@ def _register_cli(app: Flask) -> None:
 
 
 def _register_context(app: Flask) -> None:
+    from app.blueprints.auth.forms import LogoutForm
     from app.models import User
 
     @app.shell_context_processor
@@ -121,4 +118,30 @@ def _register_context(app: Flask) -> None:
             "app_version": app.config["APP_VERSION"],
             "nav_items": NAV_ITEMS,
             "nav_groups": NAV_GROUPS,
+            "logout_form": LogoutForm(),
         }
+
+
+def _register_security_headers(app: Flask) -> None:
+    """Apply browser hardening without changing application response bodies."""
+
+    @app.after_request
+    def _secure_response(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault(
+            "Permissions-Policy", "camera=(), geolocation=(), microphone=()"
+        )
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "base-uri 'self'; frame-ancestors 'none'; object-src 'none'",
+        )
+        if request.endpoint != "static":
+            response.headers.setdefault("Cache-Control", "no-store")
+            response.headers.setdefault("Pragma", "no-cache")
+        if request.is_secure:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response

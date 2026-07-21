@@ -1,11 +1,11 @@
 """Live DHIS2 authentication routes."""
 from urllib.parse import urlsplit
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.blueprints.auth import bp
-from app.blueprints.auth.forms import LoginForm
+from app.blueprints.auth.forms import LoginForm, LogoutForm
 from app.services.dhis2_auth import (
     authenticate_dhis2_user,
     clear_dhis2_session,
@@ -53,9 +53,12 @@ def login():
     return render_template("auth/login.html", form=form)
 
 
-@bp.route("/logout")
+@bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
+    form = LogoutForm()
+    if not form.validate_on_submit():
+        abort(400)
     clear_dhis2_session()
     flash("You have been signed out.", "success")
     return redirect(url_for("auth.login"))
