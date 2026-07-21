@@ -1,0 +1,14 @@
+# Optional dependencies for real climate API download and zonal aggregation.
+# Install only when running Prompts 19-21 climate workflows.
+cdsapi>=0.7
+geopandas>=0.14
+numpy>=1.26
+pandas>=2.2
+rasterio>=1.3
+rasterstats>=0.20
+rioxarray>=0.15
+shapely>=2.0
+xarray>=2024.1
+h5netcdf>=1.3
+h5py>=3.10
+netCDF4>=1.6

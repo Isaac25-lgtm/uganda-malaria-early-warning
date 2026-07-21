@@ -1,0 +1,25 @@
+{# SUPERSEDED (Phase 29E).
+
+   This template is no longer rendered by any route: Settings & Governance is
+   implemented and served from `settings/index.html` via the `settings.index`
+   endpoint. The file is retained (not deleted) so history stays intact. Its
+   previous copy described governance as absent from this research build, which is
+   no longer true, so that wording has been removed rather than left to contradict
+   the shipped system.
+
+   Settings page:  app/blueprints/settings/routes.py -> app/templates/settings/index.html
+#}
+{% extends "base.html" %}
+{% block title %}Settings &amp; Governance &mdash; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">Settings &amp; Governance</h1>
+  <p class="page-sub">This view has moved. Open Settings &amp; Governance from the navigation.</p>
+</div>
+<section class="grid-single">
+  <article class="panel"><div class="panel-body">
+    <p><a class="btn btn-primary" href="{{ url_for('settings.index') }}">Go to Settings &amp; Governance</a></p>
+  </div></article>
+</section>
+{% endblock %}

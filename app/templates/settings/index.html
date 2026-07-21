@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% import "lifecycle/_lifecycle.html" as ui %}
+{% block title %}Settings &amp; Governance &mdash; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div>
+  {{ ui.page_head("Settings & Governance",
+     "This page provides verified information about the system, published data, model governance and session security.") }}
+  <p class="page-sub">It does not trigger data extraction, model training or forecast generation.</p>
+
+  {% call ui.how_to_read() %}
+    Every value on this page is read from approved evidence through the governance API. Statuses,
+    counts and timestamps are evidence-derived — nothing is hardcoded. Only your display preferences
+    are writable, and they are stored in this browser alone.
+  {% endcall %}
+
+  <div class="state-block" id="gov-state" role="status" aria-live="polite">Loading governance evidence&hellip;</div>
+
+  <div id="gov-content" hidden>
+    <div class="gov-warnings" id="gov-warnings" role="status" hidden></div>
+
+    {# 1. System Overview #}
+    <section class="grid-single"><article class="panel"><header class="panel-head">
+      <h2 class="panel-title">1 &middot; System Overview</h2></header>
+      <div class="panel-body"><dl class="gov-grid" id="sec-overview"></dl></div>
+      <p class="panel-src" id="sec-overview-ts"></p></article></section>
+
+    {# 2. Authentication and Session Security #}
+    <section class="grid-single"><article class="panel"><header class="panel-head">
+      <h2 class="panel-title">2 &middot; Authentication and Session Security</h2></header>
+      <div class="panel-body"><dl class="gov-grid" id="sec-auth"></dl>
+        <p class="lifecycle-note-body" id="sec-auth-note"></p></div></article></section>
+
+    {# 3. Data Provenance and Freshness #}
+    <section class="grid-single"><article class="panel"><header class="panel-head">
+      <h2 class="panel-title">3 &middot; Data Provenance and Freshness</h2></header>
+      <div class="panel-body"><div class="table-scroll"><table class="data-table" id="sec-provenance">
+        <thead><tr><th>Source</th><th>Detail</th></tr></thead><tbody></tbody></table></div></div></article></section>
+
+    {# 4. Pipeline Status #}
+    <section class="grid-single"><article class="panel"><header class="panel-head">
+      <h2 class="panel-title">4 &middot; Pipeline Status</h2></header>
+      <p class="panel-subhead" id="sec-pipeline-state"></p>
+      <div class="panel-body"><div class="table-scroll"><table class="data-table" id="sec-pipeline">
+        <thead><tr><th>Stage</th><th>Status</th><th>Output</th><th>Note</th></tr></thead><tbody></tbody></table></div></div></article></section>
+
+    {# 5. Model Governance #}
+    <section class="grid-single"><article class="panel"><header class="panel-head">
+      <h2 class="panel-title">5 &middot; Model Governance</h2></header>
+      <div class="panel-body">
+        <dl class="gov-grid" id="sec-models"></dl>
+        <div class="table-scroll"><table class="data-table" id="sec-models-table">
+          <thead><tr><th>Horizon</th><th>Count model</th><th>Surge model</th></tr></thead><tbody></tbody></table></div>
+        <h3 class="panel-subhead">Model artifacts</h3>
+        <div class="table-scroll"><table class="data-table" id="sec-models-artifacts">
+          <thead><tr><th>Model</th><th>Model card</th><th>Validation artifact</th></tr></thead><tbody></tbody></table></div>
+        <h3 class="panel-subhead">Excluded methods and predictors (verified absent)</h3>
+        <div class="table-scroll"><table class="data-table" id="sec-models-excluded">
+          <thead><tr><th>Item</th><th>Type</th><th>Status in approved scope</th></tr></thead><tbody></tbody></table></div>
+        <p class="panel-src" id="sec-models-rules"></p></div></article></section>
+
+    {# 6. Forecast Governance #}
+    <section class="grid-single"><article class="panel"><header class="panel-head">
+      <h2 class="panel-title">6 &middot; Forecast Governance</h2></header>
+      <div class="panel-body">
+        <div class="table-scroll"><table class="data-table" id="sec-forecast-targets">
+          <thead><tr><th>Horizon</th><th>Published target</th><th>Target week start</th><th>Database target</th></tr></thead><tbody></tbody></table></div>
+        <dl class="gov-grid" id="sec-forecasts"></dl></div></article></section>
+
+    {# 7. Data Quality Rules #}
+    <section class="grid-single"><article class="panel"><header class="panel-head">
+      <h2 class="panel-title">7 &middot; Data Quality Rules</h2></header>
+      <div class="panel-body" id="sec-dq"></div></article></section>
+
+    {# 8. Reports and Export Status #}
+    <section class="grid-single"><article class="panel"><header class="panel-head">
+      <h2 class="panel-title">8 &middot; Reports and Export Status</h2></header>
+      <div class="panel-body"><div class="table-scroll"><table class="data-table" id="sec-reports">
+        <thead><tr><th>Report</th><th>Formats</th><th>Open</th></tr></thead><tbody></tbody></table></div>
+        <p class="panel-src" id="sec-reports-deferred"></p></div></article></section>
+
+    {# 9. System Integrity #}
+    <section class="grid-single"><article class="panel"><header class="panel-head">
+      <h2 class="panel-title">9 &middot; System Integrity</h2></header>
+      <div class="panel-body"><dl class="gov-grid" id="sec-integrity"></dl>
+        <p class="panel-src" id="sec-integrity-ts"></p></div></article></section>
+
+    {# 10. Display Preferences (the only writable behaviour) #}
+    <section class="grid-single"><article class="panel"><header class="panel-head">
+      <h2 class="panel-title">10 &middot; Display Preferences</h2></header>
+      <div class="panel-body">
+        <p class="page-sub" id="sec-prefs-note"></p>
+        <div class="pref-grid">
+          <label class="pref-item"><span>Default forecast horizon</span>
+            <select id="pref-default_horizon" class="filter-select">
+              <option value="4">4 weeks</option><option value="8">8 weeks</option><option value="12">12 weeks</option>
+            </select></label>
+          <label class="pref-item pref-check"><input type="checkbox" id="pref-reduce_motion">
+            <span>Reduce motion</span></label>
+        </div>
+        <div class="report-actions">
+          <button type="button" class="btn btn-primary" id="pref-save">Save preferences</button>
+          <button type="button" class="btn btn-secondary" id="pref-reset">Reset to defaults</button>
+        </div>
+        <div class="state-block" id="pref-state" role="status" aria-live="polite" hidden></div>
+      </div></article></section>
+
+    {# 11. Research Status and Limitations #}
+    <section class="grid-single"><article class="panel panel-note"><header class="panel-head">
+      <h2 class="panel-title">11 &middot; Research Status and Limitations</h2></header>
+      <div class="panel-body">
+        <p class="lifecycle-strong" id="sec-research-status"></p>
+        <p class="lifecycle-note-body" id="sec-research-use"></p>
+        <ul class="note-list" id="sec-research-limits"></ul></div></article></section>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings.js') }}" defer></script>
+{% endblock %}

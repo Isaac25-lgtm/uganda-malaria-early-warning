@@ -1,0 +1,4 @@
+Single-database configuration for Flask (Flask-Migrate / Alembic).
+
+Apply migrations with:  flask db upgrade
+Create a new migration:  flask db migrate -m "message"  then  flask db upgrade

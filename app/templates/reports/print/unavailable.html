@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Report unavailable{% endblock %}
+{% block content %}
+<div class="page-head"><h1 class="page-title">Report unavailable</h1></div>
+<section class="grid-single">
+  <article class="panel panel-note"><div class="panel-body">
+    <p class="lifecycle-strong">{{ reason }}</p>
+    <p class="page-sub">No partial report is produced when required evidence is unavailable.</p>
+    <p><a class="btn btn-secondary" href="{{ url_for('reports.index') }}">Back to Reports</a></p>
+  </div></article>
+</section>
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "reports/print/_print_base.html" %}
+{% block report_body %}
+{% set d = ctx.district %}
+<section class="print-section">
+  <h2>Forecast summary</h2>
+  <table class="print-kv"><tbody>
+    <tr><th scope="row">Risk level</th><td>{{ d.risk_level }}</td></tr>
+    <tr><th scope="row">Count-model predicted cases ({{ d.count_model_name }})</th><td>{{ '{:,.0f}'.format(d.predicted_cases) if d.predicted_cases is not none else '—' }}</td></tr>
+    <tr><th scope="row">Surge-model predicted cases ({{ d.surge_model_name }})</th><td>{{ '{:,.0f}'.format(d.surge_predicted_cases) if d.surge_predicted_cases is not none else '—' }}</td></tr>
+    <tr><th scope="row">District threshold</th><td>{{ '{:,.0f}'.format(d.threshold_used) if d.threshold_used is not none else '—' }}</td></tr>
+    <tr><th scope="row">Surge score (cases)</th><td>{{ '{:+,.0f}'.format(d.predicted_surge_score) if d.predicted_surge_score is not none else '—' }}</td></tr>
+    <tr><th scope="row">Reporting completeness</th><td>{{ '{:,.1f}'.format(d.reporting_completeness) ~ '%' if d.reporting_completeness is not none else 'Not reported' }}</td></tr>
+    <tr><th scope="row">Observed cases (issue week)</th><td>{{ '{:,.0f}'.format(d.observed_cases) if d.observed_cases is not none else '—' }}</td></tr>
+  </tbody></table>
+</section>
+<section class="print-section">
+  <h2>Interpretation</h2>
+  {% for line in ctx.interpretation %}<p>{{ line }}</p>{% endfor %}
+</section>
+<section class="print-section">
+  <h2>Recent observed cases and target-week forecast</h2>
+  <table class="print-table"><thead><tr><th>Week</th><th>Period</th><th class="num">Cases</th><th class="num">Threshold</th></tr></thead>
+  <tbody>
+  {% for r in ctx.weekly.rows %}{% if r.period == 'observed' and loop.revindex <= 11 %}
+    <tr><td>{{ r.week_label }}</td><td>Observed</td><td class="num">{{ '{:,.0f}'.format(r.actual_cases) if r.actual_cases is not none else '—' }}</td><td class="num">—</td></tr>
+  {% endif %}{% endfor %}
+  {% for r in ctx.weekly.rows %}{% if r.period == 'forecast' %}
+    <tr class="row-forecast"><td>{{ r.week_label }}</td><td>Forecast target</td>
+      <td class="num">{{ '{:,.0f}'.format(r.predicted_cases) if r.predicted_cases is not none else '—' }}</td>
+      <td class="num">{{ '{:,.0f}'.format(r.surge_threshold) if r.surge_threshold is not none else '—' }}</td></tr>
+  {% endif %}{% endfor %}
+  </tbody></table>
+  <p class="print-note">{{ ctx.weekly.threshold_note }}</p>
+</section>
+<section class="print-section">
+  <h2>Climate context</h2>
+  <table class="print-table"><thead><tr><th>Variable</th><th>Source</th><th>Unit</th>
+    <th class="num">Current</th><th class="num">4w lag</th><th class="num">8w lag</th><th class="num">12w lag</th></tr></thead>
+  <tbody>{% for row in ctx.climate.rows %}
+    <tr><td>{{ row.label }}</td><td>{{ row.source }}</td><td>{{ row.unit }}</td>
+      <td class="num">{{ '{:,.1f}'.format(row.measures.current.value) if row.measures.current.value is not none else '—' }}</td>
+      <td class="num">{{ '{:,.1f}'.format(row.measures.lag_4.value) if row.measures.lag_4.value is not none else '—' }}</td>
+      <td class="num">{{ '{:,.1f}'.format(row.measures.lag_8.value) if row.measures.lag_8.value is not none else '—' }}</td>
+      <td class="num">{{ '{:,.1f}'.format(row.measures.lag_12.value) if row.measures.lag_12.value is not none else '—' }}</td></tr>
+  {% endfor %}</tbody></table>
+  <p class="print-note">{{ ctx.climate.causation_note }}</p>
+</section>
+{% endblock %}

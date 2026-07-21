@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block title %}Dashboard &mdash; {{ app_name }}{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+{% endblock %}
+
+{% block topbar_filters %}
+<div class="filters" role="group" aria-label="Dashboard filters">
+  <div class="filter">
+    <span class="filter-icon" aria-hidden="true">{{ icons.icon('calendar') }}</span>
+    <span class="filter-body">
+      <label class="filter-label" for="filter-issue">Issue week</label>
+      <select class="filter-select" id="filter-issue" {% if filters.issues|length <= 1 %}disabled{% endif %}>
+        {% for issue in filters.issues %}
+        <option value="{{ issue.issue_year }}-{{ issue.issue_week }}" {% if loop.first %}selected{% endif %}>
+          {{ issue.issue_label }}{% if issue.issue_week_start_date %} &middot; issued {{ issue.issue_week_start_date }}{% endif %}
+        </option>
+        {% else %}
+        <option value="">No production issue available</option>
+        {% endfor %}
+      </select>
+    </span>
+  </div>
+
+  <div class="filter filter-district">
+    <span class="filter-icon" aria-hidden="true">{{ icons.icon('map-pin') }}</span>
+    <span class="filter-body">
+      <label class="filter-label" for="filter-district-search">District</label>
+      <span class="district-combobox">
+        <input class="filter-district-search" id="filter-district-search" type="search"
+               value="All Districts (Uganda)" placeholder="Search districts"
+               role="combobox" aria-autocomplete="list" aria-expanded="false"
+               aria-controls="district-options" autocomplete="off" spellcheck="false">
+        <ul class="district-options" id="district-options" role="listbox" hidden>
+          <li class="district-option" id="district-option-all" role="option"
+              data-value="all" data-label="All Districts (Uganda)" aria-selected="true">
+            All Districts (Uganda)
+          </li>
+          {% for district in filters.districts %}
+          <li class="district-option" id="district-option-{{ loop.index }}" role="option"
+              data-value="{{ district.district_id }}" data-label="{{ district.district_name }}"
+              aria-selected="false">{{ district.district_name }}</li>
+          {% endfor %}
+          <li class="district-option-empty" aria-live="polite" hidden>No district found</li>
+        </ul>
+      </span>
+      <select id="filter-district" hidden aria-hidden="true" tabindex="-1">
+        <option value="all" selected>All Districts (Uganda)</option>
+        {% for district in filters.districts %}
+        <option value="{{ district.district_id }}">{{ district.district_name }}</option>
+        {% endfor %}
+      </select>
+    </span>
+  </div>
+
+  <div class="filter">
+    <span class="filter-icon" aria-hidden="true">{{ icons.icon('forecasts') }}</span>
+    <span class="filter-body">
+      <label class="filter-label" for="filter-horizon">Forecast horizon</label>
+      <select class="filter-select" id="filter-horizon">
+        {% for horizon in filters.horizons %}
+        <option value="{{ horizon.value }}" {% if horizon.value == default_horizon %}selected{% endif %}>{{ horizon.label }}</option>
+        {% else %}
+        <option value="4" selected>4 weeks</option>
+        {% endfor %}
+      </select>
+    </span>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title" id="page-title">National Malaria Early Warning Overview</h1>
+  <p class="page-lead" id="page-lead">
+    This dashboard combines recent malaria reports, climate signals and validated models
+    to support early review of possible district-level malaria surges.
+    It shows the latest observed burden, target-week forecasts and districts that may require attention.
+  </p>
+  <p class="page-context" id="page-scope-note"></p>
+</div>
+
+{% if dashboard_status == 'unavailable' %}
+<div class="notice notice-warn" role="status">
+  <span class="notice-icon" aria-hidden="true">{{ icons.icon('alert') }}</span>
+  <div>
+    <p class="notice-title">Forecast output unavailable</p>
+    <p class="notice-body">{{ dashboard_reason }}</p>
+  </div>
+</div>
+{% endif %}
+
+{# ---- KPI row ---- #}
+<section class="kpi-row" aria-label="Key indicators" aria-live="polite">
+  <article class="kpi-card" id="kpi-cases">
+    <div class="kpi-top">
+      <span class="kpi-icon kpi-teal" aria-hidden="true">{{ icons.icon('forecasts') }}</span>
+      <span class="kpi-hint" id="kpi-cases-hint">Issue week</span>
+    </div>
+    <div class="kpi-label">Confirmed Malaria Cases</div>
+    <div class="kpi-value" id="kpi-cases-value">&mdash;</div>
+    <div class="kpi-empty" id="kpi-cases-note">Loading dashboard data&hellip;</div>
+  </article>
+
+  <article class="kpi-card" id="kpi-completeness">
+    <div class="kpi-top">
+      <span class="kpi-icon kpi-green" aria-hidden="true">{{ icons.icon('reports') }}</span>
+      <span class="kpi-hint" id="kpi-completeness-hint">Issue week</span>
+    </div>
+    <div class="kpi-label">Reporting Completeness</div>
+    <div class="kpi-value" id="kpi-completeness-value">&mdash;</div>
+    <div class="kpi-empty" id="kpi-completeness-note">Loading dashboard data&hellip;</div>
+  </article>
+
+  <article class="kpi-card" id="kpi-risk">
+    <div class="kpi-top">
+      <span class="kpi-icon kpi-red" aria-hidden="true">{{ icons.icon('alert') }}</span>
+      <span class="kpi-hint" id="kpi-risk-hint">High or Very High</span>
+    </div>
+    <div class="kpi-label">Districts at Surge Risk</div>
+    <div class="kpi-value" id="kpi-risk-value">&mdash;</div>
+    <div class="kpi-empty" id="kpi-risk-note">Loading dashboard data&hellip;</div>
+  </article>
+
+  <article class="kpi-card" id="kpi-horizon">
+    <div class="kpi-top">
+      <span class="kpi-icon kpi-purple" aria-hidden="true">{{ icons.icon('calendar') }}</span>
+      <span class="kpi-hint" id="kpi-horizon-hint">Selected</span>
+    </div>
+    <div class="kpi-label">Forecast Horizon</div>
+    <div class="kpi-value" id="kpi-horizon-value">&mdash;</div>
+    <div class="kpi-empty" id="kpi-horizon-note">Loading dashboard data&hellip;</div>
+  </article>
+</section>
+
+{# ---- Primary band: forecast chart + risk map ---- #}
+<section class="grid-primary">
+  <article class="panel panel-chart" data-panel="weekly">
+    <header class="panel-head">
+      <h2 class="panel-title">Weekly Confirmed Malaria Cases and Forecast</h2>
+      <span class="panel-badge" id="weekly-model-badge"></span>
+      <button type="button" class="how-toggle" aria-expanded="false" aria-controls="weekly-how">How to read this</button>
+    </header>
+    <p class="panel-lead">Shows observed malaria cases and the forecast for the selected target week. Compare the target-week forecast with the district threshold to understand the risk assessment.</p>
+    <div class="how-note" id="weekly-how" hidden>
+      The selected count model predicts the target week only. Intermediate weekly forecasts are not
+      generated, so no continuous forecast line is drawn. The shaded band marks the period between the
+      issue week and the target week; it does not imply weekly predictions. Prediction intervals appear
+      only when the selected count model publishes them.
+    </div>
+    <div class="panel-body">
+      <div class="chart-toolbar" role="group" aria-label="Chart range">
+        <button type="button" class="chip is-active" data-range="52">Last 52 weeks</button>
+        <button type="button" class="chip" data-range="104">Last 104 weeks</button>
+        <button type="button" class="chip" data-range="all">All weeks</button>
+      </div>
+      <div class="chart-wrap"><canvas id="weekly-chart" aria-label="Weekly confirmed malaria cases and forecast" role="img"></canvas></div>
+      <div class="state-block" id="weekly-state" role="status">Loading dashboard data&hellip;</div>
+      <p class="panel-src" id="weekly-note"></p>
+    </div>
+  </article>
+
+  <article class="panel" data-panel="map">
+    <header class="panel-head">
+      <h2 class="panel-title">Uganda District Risk Map</h2>
+      {{ icons.info_tip('Count-threshold risk assessment by district for the selected horizon, joined on district_id. Risk indicates where review is warranted; it does not confirm an outbreak.') }}
+    </header>
+    <div class="panel-body map-body">
+      <div id="risk-map" class="map-canvas" role="img" aria-label="Choropleth of district surge risk"></div>
+      <div class="state-block" id="map-state" role="status">Loading dashboard data&hellip;</div>
+    </div>
+    <div class="map-legend" aria-label="Risk legend">
+      <span class="lg"><i class="sw sw-vhigh"></i>Very High</span>
+      <span class="lg"><i class="sw sw-high"></i>High</span>
+      <span class="lg"><i class="sw sw-mod"></i>Moderate</span>
+      <span class="lg"><i class="sw sw-low"></i>Low</span>
+      <span class="lg"><i class="sw sw-nodata"></i>No data</span>
+    </div>
+    <p class="panel-src" id="map-note">Source: District boundaries &mdash; UBOS.</p>
+  </article>
+</section>
+
+{# ---- Risk table ---- #}
+<section class="grid-single">
+  <article class="panel" data-panel="risk">
+    <header class="panel-head">
+      <h2 class="panel-title">Districts at Surge Risk</h2>
+      <button type="button" class="how-toggle" aria-expanded="false" aria-controls="risk-how">How to read this</button>
+      <div class="panel-tools">
+        <label class="sr-only" for="risk-search">Search districts</label>
+        <input class="input input-sm" id="risk-search" type="search" placeholder="Search district&hellip;" autocomplete="off">
+      </div>
+    </header>
+    <p class="panel-lead">Ranks districts by forecast risk for the selected horizon. Predicted counts and surge risk may come from different validated models. They are displayed together for interpretation but are not combined into one model.</p>
+    <div class="how-note" id="risk-how" hidden>
+      Risk level comes from the selected surge model, comparing its predicted cases with a district
+      threshold built only from that district's history up to the issue week. The surge score is a
+      difference in cases (predicted cases minus threshold), not a probability. Sort any column; search
+      by district name.
+    </div>
+    <p class="panel-subhead" id="risk-subhead"></p>
+    <div class="panel-body">
+      <div class="table-scroll table-scroll-tall">
+        <table class="data-table" id="risk-table">
+          <thead>
+            <tr>
+              <th class="sortable" data-key="district_name" data-type="text" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">District</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+              <th class="sortable" data-key="risk_rank" data-type="number" aria-sort="none" id="th-risk"><button type="button" class="th-sort"><span class="th-label">Risk level</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+              <th class="sortable" data-key="predicted_cases" data-type="number" aria-sort="none" id="th-predicted"><button type="button" class="th-sort"><span class="th-label">Predicted cases</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+              <th class="sortable" data-key="surge_predicted_cases" data-type="number" aria-sort="none" id="th-surge-cases"><button type="button" class="th-sort"><span class="th-label">Surge-model cases</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+              <th class="sortable" data-key="threshold_used" data-type="number" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Surge threshold</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+              <th class="sortable" data-key="predicted_surge_score" data-type="number" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Surge score</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+              <th class="sortable" data-key="trend" data-type="text" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Trend</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+              <th class="sortable" data-key="reporting_completeness" data-type="number" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Completeness</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+              <th class="sortable" data-key="forecast_horizon_weeks" data-type="number" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Horizon</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+            </tr>
+          </thead>
+          <tbody id="risk-tbody"></tbody>
+        </table>
+      </div>
+      <div class="state-block" id="risk-state" role="status">Loading dashboard data&hellip;</div>
+      <nav class="pager" id="risk-pager" aria-label="Risk table pages" hidden>
+        <button type="button" class="pager-btn" id="risk-prev">&larr; Previous</button>
+        <span class="pager-status" id="risk-page-status" role="status" aria-live="polite"></span>
+        <button type="button" class="pager-btn" id="risk-next">Next &rarr;</button>
+      </nav>
+      <p class="panel-src" id="risk-note"></p>
+    </div>
+  </article>
+</section>
+
+{# ---- Climate: own full-width row ---- #}
+<section class="grid-single">
+  <article class="panel" data-panel="climate">
+    <header class="panel-head">
+      <h2 class="panel-title">Climate Predictors and Lags</h2>
+      <button type="button" class="how-toggle" aria-expanded="false" aria-controls="climate-how">How to read this</button>
+    </header>
+    <p class="panel-lead">Shows rainfall, temperature and humidity values used as supporting predictors in the forecasting models. Lag values show conditions from earlier weeks that were available before the forecast target.</p>
+    <div class="how-note" id="climate-how" hidden>
+      Climate variables are supporting predictors associated with malaria patterns; they do not
+      establish causation. National values are unweighted district means, so each district contributes
+      equally. No lag is emphasised over another: the pipeline does not compute a climate&ndash;malaria
+      correlation, so no "best" lag is claimed.
+    </div>
+    <p class="panel-subhead" id="climate-subhead"></p>
+    <div class="panel-body">
+      <div class="climate-grid" id="climate-cards"></div>
+      <div class="state-block" id="climate-state" role="status">Loading dashboard data&hellip;</div>
+      <p class="panel-src" id="climate-note"></p>
+    </div>
+  </article>
+</section>
+
+{# ---- Model performance: own full-width row, tabbed ---- #}
+<section class="grid-single">
+  <article class="panel" data-panel="performance">
+    <header class="panel-head">
+      <h2 class="panel-title">Model Performance Comparison</h2>
+      <button type="button" class="how-toggle" aria-expanded="false" aria-controls="performance-how">How to read this</button>
+    </header>
+    <p class="panel-lead">National rolling-origin validation metrics for the four approved models at the selected horizon. Count and surge models are selected on different rules and shown separately.</p>
+    <div class="how-note" id="performance-how" hidden>
+      Metrics are national validation results across all districts; they do not change with the district
+      filter. Count models are selected on lowest WAPE (RMSE when WAPE is unavailable). Surge models are
+      selected from methods meeting the sensitivity and specificity guardrails where possible,
+      then by highest F2 with sensitivity and PR-AUC as leading tie-breakers. Accuracy alone is never used,
+      because surge weeks are rare and a model can look accurate while missing most surges.
+    </div>
+    <p class="panel-subhead" id="performance-subhead"></p>
+    <div class="panel-body">
+      <div class="tabs" role="tablist" aria-label="Model performance views">
+        <button class="tab is-active" role="tab" id="tab-count" aria-selected="true" aria-controls="tabpanel-count" data-tab="count">Count Forecasting</button>
+        <button class="tab" role="tab" id="tab-surge" aria-selected="false" aria-controls="tabpanel-surge" data-tab="surge" tabindex="-1">Surge Detection</button>
+        <button class="tab" role="tab" id="tab-selection" aria-selected="false" aria-controls="tabpanel-selection" data-tab="selection" tabindex="-1">Model Selection</button>
+        <button class="tab" role="tab" id="tab-validation" aria-selected="false" aria-controls="tabpanel-validation" data-tab="validation" tabindex="-1">Validation Method</button>
+      </div>
+
+      <div class="tabpanel" id="tabpanel-count" role="tabpanel" aria-labelledby="tab-count" tabindex="0">
+        <div class="table-scroll">
+          <table class="data-table perf-table" id="perf-count-table">
+            <thead><tr><th>Model</th><th>Selected</th><th>MAE</th><th>RMSE</th><th>MAPE</th><th>WAPE</th><th>R&sup2;</th></tr></thead>
+            <tbody id="perf-count-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tabpanel" id="tabpanel-surge" role="tabpanel" aria-labelledby="tab-surge" tabindex="0" hidden>
+        <div class="table-scroll">
+          <table class="data-table perf-table" id="perf-surge-table">
+            <thead><tr><th>Model</th><th>Selected</th><th>Sensitivity</th><th>Specificity</th><th>Precision</th><th>F1</th><th>AUC</th></tr></thead>
+            <tbody id="perf-surge-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="tabpanel" id="tabpanel-selection" role="tabpanel" aria-labelledby="tab-selection" tabindex="0" hidden>
+        <div class="selection-grid" id="perf-selection"></div>
+      </div>
+
+      <div class="tabpanel" id="tabpanel-validation" role="tabpanel" aria-labelledby="tab-validation" tabindex="0" hidden>
+        <p class="validation-note">Models were evaluated using chronological rolling-origin validation. Training used only information available before each forecast origin, so no future data influenced any forecast.</p>
+      </div>
+
+      <div class="state-block" id="performance-state" role="status">Loading dashboard data&hellip;</div>
+      <p class="panel-src" id="performance-note"></p>
+    </div>
+  </article>
+</section>
+
+{# ---- Research use and interpretation ---- #}
+<section class="grid-single">
+  <article class="panel panel-note">
+    <header class="panel-head">
+      <h2 class="panel-title">Research use and interpretation</h2>
+    </header>
+    <div class="panel-body">
+      <ul class="note-list">
+        <li>These outputs <strong>support review and early action</strong>. They are a research proof-of-concept, not an operational alert system.</li>
+        <li>A <strong>High or Very High risk level does not confirm an outbreak</strong>. It means predicted cases approach or exceed a district threshold derived from that district&rsquo;s own recent history, and warrants review.</li>
+        <li>Predictions <strong>do not replace epidemiological judgement</strong>, field investigation or clinical confirmation.</li>
+        <li><strong>DHIS2 reporting quality affects forecasts.</strong> Weeks with low reporting completeness may understate cases. Missing data is left missing and is never treated as zero.</li>
+        <li>Confirmed reporting errors are excluded from analytical outcomes only after documented district-level consultation; raw source values remain auditable.</li>
+        <li>Climate variables are <strong>associated predictors, not established causes</strong>. Association does not establish causation, and the pipeline does not compute a climate&ndash;malaria correlation.</li>
+        <li>Model quality is judged on error and surge-detection metrics together. <strong>Accuracy alone is not used</strong>, because surge weeks are rare and a model can look accurate while missing most surges.</li>
+      </ul>
+    </div>
+  </article>
+</section>
+{% endblock %}
+
+{% block footer_status %}
+<span class="footer-updated" id="footer-updated">Last updated: loading&hellip;</span>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}" defer></script>
+{% endblock %}

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% import "lifecycle/_lifecycle.html" as ui %}
+{% block title %}Reports &amp; Exports &mdash; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div>
+  {{ ui.page_head(
+     "Reports & Exports",
+     "Generate structured reports from the published malaria surveillance, forecast, risk, climate and model-evaluation evidence.") }}
+  <p class="page-sub">Reports reflect the selected production issue week and do not trigger new data
+  extraction or model runs.</p>
+
+  {% call ui.how_to_read() %}
+    Choose a report, set the filters it supports, then pick a format. Only formats that are genuinely
+    implemented for that report are shown. Values come from the same published evidence as the
+    dashboard and lifecycle pages — nothing is recalculated for the report.
+  {% endcall %}
+
+  <section class="grid-single">
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title">Select a report</h2></header>
+      <div class="panel-body">
+        <div class="report-grid" role="radiogroup" aria-label="Report type">
+          {% for item in registry %}
+          <label class="report-card{% if loop.first %} is-active{% endif %}">
+            <input type="radio" name="report_type" value="{{ item.report_type }}"
+                   class="sr-only report-radio" {% if loop.first %}checked{% endif %}
+                   data-formats="{{ item.formats|join(',') }}"
+                   data-filters="{{ item.filters|join(',') }}">
+            <span class="report-name">{{ item.title }}</span>
+            <span class="report-purpose">{{ item.purpose }}</span>
+            <span class="report-formats">
+              {% for f in item.formats %}<span class="fmt-chip">{{ f|upper }}</span>{% endfor %}
+            </span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="grid-single">
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title">Filters and format</h2></header>
+      <div class="panel-body">
+        <div class="filters-inline report-filters">
+          <span class="filter-inline-item" id="wrap-issue">
+            <label class="filter-label" for="rp-issue">Issue week</label>
+            <select id="rp-issue" class="filter-select" {% if filters.issues|length <= 1 %}disabled{% endif %}>
+              {% for issue in filters.issues %}
+              <option value="{{ issue.issue_year }}-{{ issue.issue_week }}" {% if loop.first %}selected{% endif %}>{{ issue.issue_label }}</option>
+              {% else %}<option value="">No production issue</option>{% endfor %}
+            </select>
+          </span>
+          <span class="filter-inline-item" id="wrap-horizon">
+            <label class="filter-label" for="rp-horizon">Forecast horizon</label>
+            <select id="rp-horizon" class="filter-select">
+              {% for h in filters.horizons %}<option value="{{ h.value }}" {% if h.value == default_horizon %}selected{% endif %}>{{ h.label }}</option>
+              {% else %}<option value="4">4 weeks</option>{% endfor %}
+            </select>
+          </span>
+          <span class="filter-inline-item" id="wrap-district">
+            <label class="filter-label" for="rp-district-search">District</label>
+            <span class="district-combobox rp-combobox">
+              <input class="filter-district-search" id="rp-district-search" type="search"
+                     value="All Districts (Uganda)" placeholder="Search districts"
+                     role="combobox" aria-autocomplete="list" aria-expanded="false"
+                     aria-controls="rp-district-options" autocomplete="off" spellcheck="false">
+              <ul class="district-options" id="rp-district-options" role="listbox" hidden>
+                <li class="district-option" id="rp-district-option-all" role="option"
+                    data-value="all" data-label="All Districts (Uganda)" aria-selected="true">
+                  All Districts (Uganda)
+                </li>
+                {% for d in filters.districts %}
+                <li class="district-option" id="rp-district-option-{{ loop.index }}" role="option"
+                    data-value="{{ d.district_id }}" data-label="{{ d.district_name }}"
+                    aria-selected="false">{{ d.district_name }}</li>
+                {% endfor %}
+                <li class="district-option-empty" aria-live="polite" hidden>No district found</li>
+              </ul>
+            </span>
+            <select id="rp-district" hidden aria-hidden="true" tabindex="-1">
+              <option value="all" selected>All Districts (Uganda)</option>
+              {% for d in filters.districts %}<option value="{{ d.district_id }}">{{ d.district_name }}</option>{% endfor %}
+            </select>
+          </span>
+          <span class="filter-inline-item" id="wrap-risk">
+            <label class="filter-label" for="rp-risk">Risk level</label>
+            <select id="rp-risk" class="filter-select">
+              <option value="all" selected>All risk levels</option>
+              {% for level in risk_levels %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
+            </select>
+          </span>
+          <span class="filter-inline-item">
+            <label class="filter-label" for="rp-format">Format</label>
+            <select id="rp-format" class="filter-select"></select>
+          </span>
+        </div>
+
+        <div class="report-actions">
+          <button type="button" class="btn btn-primary" id="rp-generate">Generate report</button>
+          <a class="btn btn-secondary" id="rp-print" href="#" target="_blank" rel="noopener">Open print view</a>
+        </div>
+        <div class="state-block" id="rp-state" role="status" aria-live="polite" hidden></div>
+        <p class="panel-src" id="rp-note"></p>
+      </div>
+    </article>
+  </section>
+
+  {{ ui.limitations([
+     "Reports present published evidence for the selected production issue week; they do not trigger extraction, training or forecast generation.",
+     "A High or Very High risk level is an early-warning signal for review and does not confirm an outbreak.",
+     "Climate variables are predictive inputs; they do not establish causation.",
+     "Forecasts cover the target week only; intermediate weekly forecasts are not generated."]) }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/combobox.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/reports.js') }}" defer></script>
+{% endblock %}

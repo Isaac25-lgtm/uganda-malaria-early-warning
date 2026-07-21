@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% import "lifecycle/_lifecycle.html" as ui %}
+{% block title %}Model Evaluation &mdash; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div>
+  {{ ui.page_head(
+      "Model Evaluation",
+      "This page explains how the four approved models were tested using historical data in chronological order.") }}
+
+  {% call ui.how_to_read() %}
+    Metrics come from chronological rolling-origin validation. Count metrics measure case-number
+    error; surge metrics measure how well elevated weeks are detected. Accuracy is shown only as
+    secondary context and is <strong>not used for model selection</strong>. Nothing on this page is
+    recalculated in your browser.
+  {% endcall %}
+
+  <div class="filters-inline">
+    <label class="filter-label" for="me-horizon">Horizon</label>
+    <select id="me-horizon" class="filter-select">
+      <option value="4" selected>4 weeks</option>
+      <option value="8">8 weeks</option>
+      <option value="12">12 weeks</option>
+    </select>
+  </div>
+
+  <div class="tabs" role="tablist" aria-label="Model evaluation views">
+    <button class="tab is-active" role="tab" aria-selected="true" id="tab-count" data-tab="count">Count Forecasting</button>
+    <button class="tab" role="tab" aria-selected="false" id="tab-surge" data-tab="surge">Surge Detection</button>
+    <button class="tab" role="tab" aria-selected="false" id="tab-selection" data-tab="selection">Model Selection</button>
+    <button class="tab" role="tab" aria-selected="false" id="tab-validation" data-tab="validation">Validation Method</button>
+    <button class="tab" role="tab" aria-selected="false" id="tab-importance" data-tab="importance">Feature Importance</button>
+    <button class="tab" role="tab" aria-selected="false" id="tab-thresholds" data-tab="thresholds">Thresholds</button>
+  </div>
+
+  <section class="panel">
+    <div class="panel-body">
+      <div class="tabpanel" role="tabpanel" aria-labelledby="tab-count" data-panel="count">
+        <div class="table-scroll"><table class="data-table"><thead><tr>
+          <th>Model</th><th>Selected</th><th>MAE</th><th>RMSE</th><th>MAPE</th><th>WAPE</th><th>R&sup2;</th>
+        </tr></thead><tbody id="me-count-body"></tbody></table></div>
+      </div>
+      <div class="tabpanel" role="tabpanel" aria-labelledby="tab-surge" data-panel="surge" hidden>
+        <div class="table-scroll"><table class="data-table"><thead><tr>
+          <th>Model</th><th>Selected</th><th>Sens.</th><th>Spec.</th><th>Prec.</th><th>F1</th><th>AUC</th>
+        </tr></thead><tbody id="me-surge-body"></tbody></table></div>
+        <p class="panel-src">Accuracy is available in the artifact but is <strong>not used for model selection</strong>.</p>
+      </div>
+      <div class="tabpanel" role="tabpanel" aria-labelledby="tab-selection" data-panel="selection" hidden>
+        <div id="me-selection"></div>
+        <h3 class="panel-subhead">The four approved models</h3>
+        <ul class="note-list">
+          <li><strong>Baseline/Naive</strong> — a simple reference forecast. Its role is a benchmark: other models must beat it. Strength: transparent and robust. Limitation: ignores climate and cross-district signal.</li>
+          <li><strong>SARIMAX</strong> — a district-specific seasonal time-series model with climate regressors. Strength: captures per-district seasonality. Limitation: district-specific fitting is sensitive to short or gappy district histories.</li>
+          <li><strong>Random Forest</strong> — a national-pooled tree ensemble. Role: the model selected for both count prediction and operational surge warning at all three horizons. Strength: captures non-linear interactions. Limitation: pooled importance may not describe every district.</li>
+          <li><strong>XGBoost</strong> — a national-pooled gradient-boosted ensemble, evaluated as a count candidate but not selected in this dataset. Strength: regularised non-linear modelling. Limitation: importance is model-specific and not causal.</li>
+        </ul>
+        <p class="panel-src">Roles above reflect published evidence. The exact selected model per horizon is shown live in the Model Selection tab, not hardcoded here; no metric is invented.</p>
+      </div>
+      <div class="tabpanel" role="tabpanel" aria-labelledby="tab-validation" data-panel="validation" hidden>
+        <ul class="note-list" id="me-validation"></ul>
+      </div>
+      <div class="tabpanel" role="tabpanel" aria-labelledby="tab-importance" data-panel="importance" hidden>
+        <div class="filters-inline">
+          <label class="filter-label" for="me-model">Model</label>
+          <select id="me-model" class="filter-select"><option value="random_forest">Random Forest</option><option value="xgboost">XGBoost</option></select>
+          <label class="filter-label" for="me-method">Method</label>
+          <select id="me-method" class="filter-select"><option value="native">Native</option><option value="permutation">Permutation</option></select>
+          <label class="filter-label" for="me-view">View</label>
+          <select id="me-view" class="filter-select"><option value="features">Individual features</option><option value="families">Predictor families</option></select>
+        </div>
+        <p class="panel-subhead" id="me-importance-note"></p>
+        <div class="table-scroll"><table class="data-table"><thead><tr id="me-importance-head">
+          <th>Rank</th><th>Feature</th><th>Family</th><th>Value</th>
+        </tr></thead><tbody id="me-importance-body"></tbody></table></div>
+        <div class="state-block" id="me-importance-state" role="status" hidden></div>
+        <p class="panel-src" id="me-importance-limits"></p>
+      </div>
+      <div class="tabpanel" role="tabpanel" aria-labelledby="tab-thresholds" data-panel="thresholds" hidden>
+        <p class="panel-subhead">Count-threshold risk method (from the threshold-method API)</p>
+        <div class="table-scroll"><table class="data-table"><thead><tr><th>Risk level</th><th>Rule</th><th>Meaning</th></tr></thead><tbody id="me-threshold-body"></tbody></table></div>
+        <p class="panel-src" id="me-threshold-note"></p>
+      </div>
+      <div class="state-block" id="me-state" role="status">Loading&hellip;</div>
+    </div>
+  </section>
+
+  {{ ui.limitations([
+      "Metrics are national rolling-origin validation, not per-district accuracy.",
+      "Feature importance is pooled, model-specific and predictive, not causal.",
+      "Importance does not explain any single production prediction.",
+      "Model winners come from published evidence and are never recalculated here."]) }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/model_evaluation.js') }}" defer></script>
+{% endblock %}

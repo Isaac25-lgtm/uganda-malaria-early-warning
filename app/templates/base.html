@@ -1,0 +1,105 @@
+{% import "_icons.html" as icons %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  {% block head_extra %}{% endblock %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="app">
+  <button class="sidebar-toggle" type="button" aria-label="Toggle navigation"
+          onclick="document.body.classList.toggle('nav-open')">
+    {{ icons.icon('menu') }}
+  </button>
+
+  <aside class="sidebar" aria-label="Primary navigation">
+    <div class="brand">
+      <span class="brand-logo" aria-hidden="true">{{ icons.icon('brand') }}</span>
+      <div class="brand-text">
+        <span class="brand-name">{{ app_name }}</span>
+        <span class="brand-sub">{{ app_subtitle }}</span>
+      </div>
+    </div>
+
+    <nav class="nav" aria-label="Lifecycle sections">
+      {% for group_label, items in nav_groups %}
+      <div class="nav-group">
+        <span class="nav-group-label">{{ group_label }}</span>
+        {% for endpoint, key, label, icon in items %}
+        <a class="nav-item {% if request.blueprint == key %}is-active{% endif %}"
+           href="{{ url_for(endpoint) }}"
+           {% if request.blueprint == key %}aria-current="page"{% endif %}>
+          <span class="nav-icon" aria-hidden="true">{{ icons.icon(icon) }}</span>
+          <span class="nav-label">{{ label }}</span>
+        </a>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="org">
+        <img class="org-badge" src="{{ url_for('static', filename='img/uganda-moh-logo.jfif') }}"
+             alt="Republic of Uganda Ministry of Health">
+        <div class="org-text">
+          <span class="org-name">Ministry of Health</span>
+          <span class="org-country">Uganda</span>
+        </div>
+      </div>
+      <span class="version">Version {{ app_version }}</span>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      {% block topbar_filters %}<div class="filters"></div>{% endblock %}
+
+      <div class="profile">
+        <div class="profile-avatar" aria-hidden="true">
+          {{ (current_user.username[:2] | upper) if current_user.is_authenticated else 'AN' }}
+        </div>
+        <div class="profile-text">
+          <span class="profile-name">
+            {{ current_user.username if current_user.is_authenticated else 'Analyst' }}
+          </span>
+          <span class="profile-role">
+            {{ current_user.role if current_user.is_authenticated else 'Guest' }}
+          </span>
+        </div>
+        <a class="profile-logout" href="{{ url_for('auth.logout') }}" title="Sign out"
+           aria-label="Sign out">{{ icons.icon('logout') }}</a>
+      </div>
+    </header>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <div class="flash-stack">
+        {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    {% endwith %}
+
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="app-footer">
+      <span class="footer-note">
+        All data are provisional and subject to change. Research proof-of-concept &mdash;
+        use for decision support only.
+      </span>
+      {% block footer_status %}{% endblock %}
+    </footer>
+  </div>
+
+  {# Shared display preferences. Deferred scripts run in order, so this applies a
+     stored preference before each page's own script reads its controls. #}
+  <script src="{{ url_for('static', filename='js/preferences.js') }}" defer></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,21 @@
+{% extends "reports/print/_print_base.html" %}
+{% block report_body %}
+<section class="print-section">
+  <h2>District risk list</h2>
+  <p class="print-note">Districts listed: {{ ctx.rows|length }}{% if meta.risk_level_filter and meta.risk_level_filter != 'All' %} &middot; filtered to {{ meta.risk_level_filter }}{% endif %}</p>
+  <table class="print-table print-table-wide"><thead><tr>
+    <th>District ID</th><th>District</th><th>Risk</th><th class="num">Predicted</th>
+    <th class="num">Surge model</th><th class="num">Threshold</th><th class="num">Score</th>
+    <th class="num">Complete %</th><th>Target</th></tr></thead>
+  <tbody>{% for r in ctx.rows %}
+    <tr><td>{{ r.district_id }}</td><td>{{ r.district_name }}</td><td>{{ r.risk_level }}</td>
+      <td class="num">{{ '{:,.0f}'.format(r.predicted_cases) if r.predicted_cases is not none else '—' }}</td>
+      <td class="num">{{ '{:,.0f}'.format(r.surge_predicted_cases) if r.surge_predicted_cases is not none else '—' }}</td>
+      <td class="num">{{ '{:,.0f}'.format(r.threshold_used) if r.threshold_used is not none else '—' }}</td>
+      <td class="num">{{ '{:+,.0f}'.format(r.predicted_surge_score) if r.predicted_surge_score is not none else '—' }}</td>
+      <td class="num">{{ '{:,.1f}'.format(r.reporting_completeness) if r.reporting_completeness is not none else '—' }}</td>
+      <td>{{ r.target_label or '—' }}</td></tr>
+  {% endfor %}</tbody></table>
+  <p class="print-note">{{ ctx.score_definition }}</p>
+</section>
+{% endblock %}

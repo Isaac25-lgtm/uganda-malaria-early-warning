@@ -1,0 +1,42 @@
+{% extends "reports/print/_print_base.html" %}
+{% block report_body %}
+{% set c = ctx.coverage %}
+<section class="print-section">
+  <h2>Surveillance coverage</h2>
+  <table class="print-kv"><tbody>
+    <tr><th scope="row">Expected district-weeks</th><td>{{ '{:,}'.format(c.expected_district_weeks) }}</td></tr>
+    <tr><th scope="row">Received district-weeks</th><td>{{ '{:,}'.format(c.received_district_weeks) }}</td></tr>
+    <tr><th scope="row">Missing district-weeks (absent rows)</th><td>{{ '{:,}'.format(c.missing_district_weeks) }}</td></tr>
+    <tr><th scope="row">Explicit-zero records</th><td>{{ '{:,}'.format(c.explicit_zero_records) if c.explicit_zero_records is not none else '—' }}</td></tr>
+    <tr><th scope="row">Raw DHIS2 rows</th><td>{{ '{:,}'.format(c.raw_dhis2_rows) if c.raw_dhis2_rows is not none else '—' }}</td></tr>
+    <tr><th scope="row">Districts represented</th><td>{{ c.districts_represented }}</td></tr>
+  </tbody></table>
+  <p class="print-note">Missing district-weeks are <strong>absent records</strong>, not zeros. Missing reports are never converted to zero.</p>
+</section>
+<section class="print-section">
+  <h2>Pipeline component status</h2>
+  <table class="print-table"><thead><tr><th>Component</th><th>Status</th></tr></thead>
+  <tbody>{% for k, v in ctx.components.items() %}
+    <tr><td>{{ k.replace('_', ' ')|title }}</td><td>{{ v }}</td></tr>{% endfor %}</tbody></table>
+</section>
+<section class="print-section">
+  <h2>Leakage controls (evidence-derived)</h2>
+  <table class="print-table"><thead><tr><th>Control</th><th>Verified</th><th>Source</th></tr></thead>
+  <tbody>{% for key, control in ctx.leakage_controls.items() %}
+    <tr><td>{{ key.replace('_', ' ')|title }}</td>
+      <td>{{ 'Yes' if control.value is true else 'No' }}</td>
+      <td>{{ control.source }}</td></tr>{% endfor %}</tbody></table>
+  <p class="print-note">Rows with all nine climate lags present:
+    {{ '{:,}'.format(ctx.rows_with_complete_climate_lags) }} of
+    {{ '{:,}'.format(ctx.coverage.received_district_weeks) }}.</p>
+</section>
+<section class="print-section">
+  <h2>Quality rules and definitions</h2>
+  <dl class="print-dl">{% for term, meaning in ctx.definitions %}
+    <dt>{{ term }}</dt><dd>{{ meaning }}</dd>{% endfor %}</dl>
+  <p class="print-note">Climate lag columns verified: {{ ctx.climate_lag_columns|join(', ') }}</p>
+  {% if ctx.evidence_warnings %}
+  <p class="print-note"><strong>Evidence warnings:</strong> {{ ctx.evidence_warnings|join(' ') }}</p>
+  {% endif %}
+</section>
+{% endblock %}

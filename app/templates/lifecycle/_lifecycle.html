@@ -1,0 +1,54 @@
+{% import "_icons.html" as icons %}
+
+{# Page header: title + one-sentence purpose + optional stage/timestamp line. #}
+{% macro page_head(title, purpose, stage=None) %}
+<div class="page-head">
+  <h1 class="page-title">{{ title }}</h1>
+  <p class="page-sub">{{ purpose }}</p>
+  {% if stage %}<p class="lifecycle-stage">{{ stage }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{# A KPI-style stat tile bound to an API field. #}
+{% macro stat(label, field, format='text', hint=None, accent='teal') %}
+<article class="kpi-card">
+  <div class="kpi-top">
+    <span class="kpi-icon kpi-{{ accent }}" aria-hidden="true">{{ icons.icon('table') }}</span>
+    {% if hint %}<span class="kpi-hint">{{ hint }}</span>{% endif %}
+  </div>
+  <div class="kpi-label">{{ label }}</div>
+  <div class="kpi-value" data-field="{{ field }}" data-format="{{ format }}">&mdash;</div>
+</article>
+{% endmacro %}
+
+{# "How to read this page" progressive disclosure (Level 2). Use with {% call %}. #}
+{% macro how_to_read() %}
+<details class="how-to-read">
+  <summary>How to read this page</summary>
+  <div class="how-to-read-body">{{ caller() }}</div>
+</details>
+{% endmacro %}
+
+{# Shared async state block. #}
+{% macro state_block() %}
+<div class="state-block" data-lifecycle-state role="status" hidden>Loading&hellip;</div>
+{% endmacro %}
+
+{# Method note / limitations / provenance blocks. #}
+{% macro note(title, body, kind='method') %}
+<div class="lifecycle-note lifecycle-note-{{ kind }}">
+  <span class="lifecycle-note-title">{{ title }}</span>
+  <span class="lifecycle-note-body">{{ body }}</span>
+</div>
+{% endmacro %}
+
+{% macro limitations(items) %}
+<section class="panel panel-note">
+  <header class="panel-head"><h2 class="panel-title">Limitations</h2></header>
+  <div class="panel-body">
+    <ul class="note-list">
+      {% for item in items %}<li>{{ item }}</li>{% endfor %}
+    </ul>
+  </div>
+</section>
+{% endmacro %}

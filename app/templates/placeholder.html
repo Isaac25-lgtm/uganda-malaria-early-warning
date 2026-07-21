@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "_icons.html" as icons %}
+{% block title %}{{ module_title }} &mdash; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">{{ module_title }}</h1>
+  <p class="page-sub">{{ module_lead }}</p>
+</div>
+
+<article class="panel">
+  <div class="panel-body empty-state empty-lg">
+    <span class="empty-icon">{{ icons.icon('info') }}</span>
+    <p class="empty-title">Module scaffolded</p>
+    <p class="empty-sub">{{ module_note }}</p>
+  </div>
+</article>
+{% endblock %}

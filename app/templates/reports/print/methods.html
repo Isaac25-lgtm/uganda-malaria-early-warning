@@ -1,0 +1,16 @@
+{% extends "reports/print/_print_base.html" %}
+{% block report_body %}
+<section class="print-section">
+  {% for heading, text in ctx.sections %}
+  <h2>{{ loop.index }}. {{ heading }}</h2>
+  <p>{{ text }}</p>
+  {% endfor %}
+</section>
+<section class="print-section">
+  <h2>Selected models by horizon</h2>
+  <table class="print-table"><thead><tr><th>Horizon</th><th>Count model</th><th>Surge model</th></tr></thead>
+  <tbody>{% for h, s in ctx.selection_by_horizon.items() %}
+    <tr><td>{{ h }} weeks</td><td>{{ s.count.model_name }}</td><td>{{ s.surge.model_name }}</td></tr>
+  {% endfor %}</tbody></table>
+</section>
+{% endblock %}

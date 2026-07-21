@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% import "lifecycle/_lifecycle.html" as ui %}
+{% block title %}Climate Signals &mdash; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div>
+  {{ ui.page_head(
+      "Climate Signals",
+      "This page shows the environmental variables used as supporting predictors in the malaria forecasting models.") }}
+
+  {% call ui.how_to_read() %}
+    Lag values show conditions from earlier weeks that were available before the forecast
+    target. National values are an <strong>unweighted mean across districts</strong> (each
+    district counts equally). Climate variables are associated predictors — they do not prove
+    climate caused the observed malaria outcome.
+  {% endcall %}
+
+  <div class="filters-inline" role="group" aria-label="Climate filters">
+    <span class="filter-inline-item">
+      <label class="filter-label" for="climate-district">District</label>
+      <select id="climate-district" class="filter-select">
+        <option value="all" selected>All Districts (Uganda)</option>
+        {% for d in filters.districts %}<option value="{{ d.district_id }}">{{ d.district_name }}</option>{% endfor %}
+      </select>
+    </span>
+    <span class="filter-inline-item">
+      <label class="filter-label" for="climate-horizon">Highlighted lag</label>
+      <select id="climate-horizon" class="filter-select">
+        {% for h in filters.horizons %}<option value="{{ h.value }}" {% if h.value == default_horizon %}selected{% endif %}>{{ h.label }}</option>
+        {% else %}<option value="4">4 weeks</option>{% endfor %}
+      </select>
+    </span>
+  </div>
+
+  <p class="page-sub" id="climate-scope"></p>
+
+  <section class="grid-single">
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title">Rainfall, temperature and humidity</h2></header>
+      <div class="panel-body">
+        <div class="climate-cards" id="climate-cards"></div>
+        <div class="state-block" id="climate-state" role="status">Loading&hellip;</div>
+        <p class="panel-src" id="climate-note"></p>
+      </div>
+    </article>
+  </section>
+
+  {{ ui.limitations([
+      "Climate variables are predictive inputs associated with malaria patterns; they do not prove causation.",
+      "Correlation between lags and malaria is not computed, so no best-correlating lag is claimed.",
+      "National values are unweighted means in which each district contributes equally.",
+      "Values are for the latest available data week only."]) }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  function num(v) { return (v === null || v === undefined) ? "—" : Number(v).toLocaleString("en-GB", { maximumFractionDigits: 1 }); }
+  function state(msg, kind) {
+    var el = document.getElementById("climate-state");
+    el.hidden = !msg; el.textContent = msg || ""; el.className = "state-block" + (kind ? " state-" + kind : "");
+  }
+  var S = { gen: 0, abort: null };
+
+  function params() {
+    var p = {}; var d = document.getElementById("climate-district"), h = document.getElementById("climate-horizon");
+    if (d && d.value) p.district_id = d.value;
+    if (h && h.value) p.horizon = h.value;
+    return p;
+  }
+
+  function load() {
+    var p = params();
+    S.gen += 1; var gen = S.gen;
+    if (S.abort) S.abort.abort();
+    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null; S.abort = ctrl;
+    var q = Object.keys(p).map(function (k) { return k + "=" + encodeURIComponent(p[k]); }).join("&");
+    state("Loading…", "loading");
+    fetch("/api/dashboard/climate-summary?" + q, { credentials: "same-origin", headers: { Accept: "application/json" }, signal: ctrl ? ctrl.signal : undefined })
+      .then(function (r) {
+        var t = r.headers.get("content-type") || "";
+        if (t.indexOf("application/json") === -1) throw { status: r.status === 401 ? 401 : 0 };
+        return r.json().then(function (b) { if (!r.ok) throw { status: r.status }; return b; });
+      })
+      .then(function (body) {
+        if (gen !== S.gen) return; // superseded
+        var d = body.data;
+        if (!d || d.status !== "available") { document.getElementById("climate-cards").innerHTML = ""; state("Climate evidence is not available yet.", "empty"); return; }
+        state("", null);
+        document.getElementById("climate-scope").textContent = "Data week " + (d.data_week_label || "—") + " · " + d.aggregation_label;
+        document.getElementById("climate-cards").innerHTML = (d.rows || []).map(function (row) {
+          var m = row.measures || {};
+          var lags = ["lag_4", "lag_8", "lag_12"].map(function (k) {
+            var wk = k.split("_")[1], mm = m[k] || {}, active = row.highlighted_lag_key === k;
+            return '<span class="lag-chip' + (active ? " is-active" : "") + '"><i>' + wk + "w lag</i>" +
+              (mm.value === null || mm.value === undefined ? "—" : num(mm.value) + " " + row.unit) + "</span>";
+          }).join("");
+          var cur = m.current || {};
+          return '<div class="climate-card"><span class="climate-name">' + row.label + "</span>" +
+            '<span class="climate-src">' + row.source + "</span>" +
+            '<span class="climate-value">' + (cur.value === null || cur.value === undefined ? "—" : num(cur.value) + " " + row.unit) +
+            '<i class="climate-unit">current · ' + row.unit_label + "</i></span>" +
+            '<div class="lag-row">' + lags + "</div>" +
+            '<span class="climate-cov">' + (cur.districts_with_value || 0) + " of " + row.coverage.districts_expected + " districts</span></div>";
+        }).join("");
+        document.getElementById("climate-note").textContent = [d.correlation_note, d.causation_note].filter(Boolean).join(" ");
+      })
+      .catch(function (err) {
+        if (err && err.name === "AbortError") return;
+        if (gen !== S.gen) return;
+        document.getElementById("climate-cards").innerHTML = "";
+        state(err && err.status === 401 ? "Your session has ended. Sign in again." :
+          (err && err.status === 503 ? "Climate evidence is not available yet." : "Climate data could not be loaded."), "error");
+      });
+  }
+
+  ["climate-district", "climate-horizon"].forEach(function (id) { var el = document.getElementById(id); if (el) el.addEventListener("change", load); });
+  load();
+})();
+</script>
+{% endblock %}

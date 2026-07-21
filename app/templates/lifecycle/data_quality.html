@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% import "lifecycle/_lifecycle.html" as ui %}
+{% block title %}Data Quality &amp; Preparation &mdash; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div data-lifecycle-page data-endpoint="/api/lifecycle/data-quality">
+  {{ ui.page_head(
+      "Data Quality & Preparation",
+      "This page shows how raw surveillance data were checked, matched and prepared before modelling.") }}
+
+  {% call ui.how_to_read() %}
+    Each step below shows its verified status from published pipeline evidence. The steps
+    run in the backend; they are not re-run in your browser. Missing observations are kept
+    missing and are never zero-filled.
+  {% endcall %}
+
+  <section class="kpi-row" aria-label="Preparation summary" aria-live="polite">
+    {{ ui.stat("Prepared district-weeks", "panel_rows", "num", hint="Modelling panel", accent="teal") }}
+    {{ ui.stat("Active districts", "active_districts", "num", hint="Canonical match", accent="purple") }}
+    {{ ui.stat("Rows with complete climate lags", "rows_with_complete_climate_lags", "num", hint="All 9 lag columns", accent="green") }}
+  </section>
+
+  <section class="grid-single">
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title">Preparation lifecycle</h2></header>
+      <div class="panel-body">
+        <ol class="stage-flow" data-list="stages" data-item-key="title" data-item-sub="detail" data-item-status="status"></ol>
+        {{ ui.state_block() }}
+      </div>
+    </article>
+  </section>
+
+  <section class="grid-secondary-2">
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title">Method notes</h2></header>
+      <div class="panel-body">
+        {{ ui.note("Canonical matching", "Districts are matched to 146 canonical identifiers by district_id.", "method") }}
+        {{ ui.note("ISO weeks", "Epidemiological weeks are validated, including week-53 handling.", "method") }}
+        {{ ui.note("Missing is not zero", "Missing observations are retained as missing throughout preparation.", "warn") }}
+        {{ ui.note("Outcome integrity", "Confirmed reporting errors remain in the raw audit registry but are excluded from model outcomes.", "info") }}
+        {{ ui.note("Leakage prevention", "Preprocessing is fit on training data only; targets are aligned to the future forecast week.", "method") }}
+      </div>
+    </article>
+
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title">Leakage controls (evidence-derived)</h2></header>
+      <div class="panel-body">
+        <table class="data-table">
+          <tbody>
+            <tr><td>Missing not zero-filled<br><small class="cell-muted" data-field="leakage_controls.missing_not_zero_filled.source"></small></td><td class="num" data-field="leakage_controls.missing_not_zero_filled.value"></td></tr>
+            <tr><td>Future-target alignment<br><small class="cell-muted" data-field="leakage_controls.future_target_alignment.source"></small></td><td class="num" data-field="leakage_controls.future_target_alignment.value"></td></tr>
+            <tr><td>Training-only preprocessing<br><small class="cell-muted" data-field="leakage_controls.training_only_preprocessing.source"></small></td><td class="num" data-field="leakage_controls.training_only_preprocessing.value"></td></tr>
+            <tr><td>Adjudicated errors excluded from outcomes<br><small class="cell-muted" data-field="leakage_controls.adjudicated_errors_excluded_from_outcomes.source"></small></td><td class="num" data-field="leakage_controls.adjudicated_errors_excluded_from_outcomes.value"></td></tr>
+            <tr><td>Bounded predictor-only interpolation<br><small class="cell-muted" data-field="leakage_controls.bounded_predictor_only_interpolation.source"></small></td><td class="num" data-field="leakage_controls.bounded_predictor_only_interpolation.value"></td></tr>
+          </tbody>
+        </table>
+        <p class="panel-src">Each control is derived from the production manifest, the modelling-dataset summary and database evidence; none is recomputed in the browser.</p>
+      </div>
+    </article>
+  </section>
+
+  {{ ui.limitations([
+      "Source reporting quality affects every downstream stage.",
+      "Interpolated values are used only in lagged and rolling predictors, never as observed outcomes.",
+      "Missing observations remain missing and are never treated as zero.",
+      "District aggregation can hide sub-district variation."]) }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/lifecycle.js') }}" defer></script>
+{% endblock %}

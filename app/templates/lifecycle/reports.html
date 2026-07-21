@@ -1,0 +1,25 @@
+{# SUPERSEDED (Phase 29D).
+
+   This template is no longer rendered by any route: Reports & Exports is
+   implemented and served from `reports/index.html` via the `reports.index`
+   endpoint. The file is retained (not deleted) so history stays intact. Its
+   previous copy described the module as deferred to a later phase, which is no
+   longer true, so that wording has been removed rather than left to contradict
+   the shipped system.
+
+   Reports page:  app/blueprints/reports/routes.py -> app/templates/reports/index.html
+#}
+{% extends "base.html" %}
+{% block title %}Reports &amp; Exports &mdash; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">Reports &amp; Exports</h1>
+  <p class="page-sub">This view has moved. Open Reports &amp; Exports from the navigation.</p>
+</div>
+<section class="grid-single">
+  <article class="panel"><div class="panel-body">
+    <p><a class="btn btn-primary" href="{{ url_for('reports.index') }}">Go to Reports &amp; Exports</a></p>
+  </div></article>
+</section>
+{% endblock %}

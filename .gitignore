@@ -1,0 +1,92 @@
+# ---------------------------------------------------------------------------
+# Secrets and local configuration — NEVER commit
+# ---------------------------------------------------------------------------
+.env
+*.env
+!.env.example
+*.local
+*.pem
+*.key
+credentials*
+secrets*
+
+# ---------------------------------------------------------------------------
+# Research data and model artifacts — NOT published
+#
+# data/ holds Uganda Ministry of Health HMIS 033b surveillance records, DHIS2
+# metadata, CHIRPS / ERA5-Land rasters, the modelling dataset and fitted model
+# binaries (approximately 9 GB). These are excluded for data-governance reasons,
+# because some diagnostic artifacts embed local filesystem paths, and because
+# they exceed GitHub size limits. See README section "Data availability".
+# ---------------------------------------------------------------------------
+data/
+
+# Large source boundary file (46 MB); the simplified web map is derived locally
+UGANDA_DISTRICT.json
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# ---------------------------------------------------------------------------
+# Working files, backups and scratch output (not part of the deliverable)
+# ---------------------------------------------------------------------------
+.prompt29*
+.retraining_backup_*/
+.ppt_review_*/
+_verify*.py
+_audit*.py
+_browser*.py
+_inspect*.py
+_gov_check.py
+build_progress_presentation.py
+era5_smoke_test.py
+
+# Internal working prompts and drafts
+PHASE_*_PROMPT.md
+*.docx
+
+# Presentation and reference material
+Slide*.PNG
+Slide*.png
+DASHBOARD LOOK.png
+UCU_Research_Proposal_Official_Template.pdf
+
+# ---------------------------------------------------------------------------
+# Generated reports and temporary exports
+# ---------------------------------------------------------------------------
+mews_report_*
+*.tmp
+*.pid
+.dashboard_server.pid
+
+# ---------------------------------------------------------------------------
+# OS / editor
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# ---------------------------------------------------------------------------
+# Instance and logs
+# ---------------------------------------------------------------------------
+instance/
+*.log

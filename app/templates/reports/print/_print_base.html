@@ -1,0 +1,71 @@
+{# Print-friendly report shell. No sidebar, no filters, no interactive controls.
+   Reuses the Phase 29A visual language in a restrained print form. #}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ meta.report_title }} &mdash; {{ meta.issue_label }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/print.css') }}">
+</head>
+<body class="print-body">
+  <div class="print-toolbar no-print">
+    <button type="button" class="btn btn-primary" onclick="window.print()">Print this report</button>
+    <a class="btn btn-secondary" href="{{ url_for('reports.index') }}">Back to Reports</a>
+  </div>
+
+  <main class="print-page">
+    <header class="print-head">
+      <div class="print-identity">
+        <img class="print-logo" src="{{ url_for('static', filename='img/uganda-moh-logo.jfif') }}"
+             alt="Republic of Uganda Ministry of Health">
+        <div>
+          <p class="print-org">Republic of Uganda &mdash; Ministry of Health</p>
+          <h1 class="print-title">{{ meta.report_title }}</h1>
+        </div>
+      </div>
+      <p class="print-sub">{{ meta.research_use }}</p>
+    </header>
+
+    <section class="print-meta" aria-label="Report metadata">
+      <table class="print-kv">
+        <tbody>
+          <tr><th scope="row">Production issue week</th><td>{{ meta.issue_label or '—' }}</td></tr>
+          {% if meta.horizon_weeks %}<tr><th scope="row">Forecast horizon</th><td>{{ meta.horizon_weeks }} weeks</td></tr>{% endif %}
+          {% if meta.target_label %}<tr><th scope="row">Target week</th><td>{{ meta.target_label }}</td></tr>{% endif %}
+          {% if meta.district_name %}<tr><th scope="row">District</th><td>{{ meta.district_name }}</td></tr>{% endif %}
+          {% if meta.count_model_name %}<tr><th scope="row">Selected count model</th><td>{{ meta.count_model_name }}</td></tr>{% endif %}
+          {% if meta.surge_model_name %}<tr><th scope="row">Selected surge model</th><td>{{ meta.surge_model_name }}</td></tr>{% endif %}
+          <tr><th scope="row">Generated (server)</th><td>{{ meta.generated_at_utc }}</td></tr>
+          {% if meta.evidence_generated_at_utc %}<tr><th scope="row">Evidence generated</th><td>{{ meta.evidence_generated_at_utc }}</td></tr>{% endif %}
+          {% if meta.dataset_signature_short %}<tr><th scope="row">Dataset signature</th><td>{{ meta.dataset_signature_short }}</td></tr>{% endif %}
+          <tr><th scope="row">Report schema</th><td>{{ meta.report_schema_version }}</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    {% block report_body %}{% endblock %}
+
+    <section class="print-section print-limits">
+      <h2>Interpretation and limitations</h2>
+      <ul>
+        {% for item in ctx.limitations %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+    </section>
+
+    <section class="print-section">
+      <h2>Data sources</h2>
+      <ul class="print-sources">
+        {% for item in meta.data_sources %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+    </section>
+
+    <footer class="print-foot">
+      <p>{{ meta.application_name }} &middot; version {{ meta.application_version }} &middot;
+         generated {{ meta.generated_at_utc }}</p>
+      <p>Research proof-of-concept &mdash; not an official Ministry of Health guideline or endorsement.</p>
+    </footer>
+  </main>
+</body>
+</html>

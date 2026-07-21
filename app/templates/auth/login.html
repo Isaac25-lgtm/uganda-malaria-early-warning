@@ -1,0 +1,51 @@
+{% import "_icons.html" as icons %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in &mdash; {{ app_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+</head>
+<body class="auth-body">
+  <main class="auth-card">
+    <div class="auth-brand">
+      <img class="auth-logo" src="{{ url_for('static', filename='img/uganda-moh-logo.jfif') }}"
+           alt="Republic of Uganda Ministry of Health">
+      <h1 class="auth-title">{{ app_name }}</h1>
+      <p class="auth-sub">{{ app_subtitle }}</p>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <div class="flash-stack">
+        {% for category, message in messages %}
+        <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    {% endwith %}
+
+    <form method="post" novalidate class="auth-form" autocomplete="off">
+      {{ form.hidden_tag() }}
+      <label class="field">
+        <span class="field-label">{{ form.username.label.text }}</span>
+        {{ form.username(class="input", autofocus=true, autocomplete="off", spellcheck="false") }}
+        {% for error in form.username.errors %}
+        <em class="field-error">{{ error }}</em>
+        {% endfor %}
+      </label>
+      <label class="field">
+        <span class="field-label">{{ form.password.label.text }}</span>
+        {{ form.password(class="input", autocomplete="off") }}
+        {% for error in form.password.errors %}
+        <em class="field-error">{{ error }}</em>
+        {% endfor %}
+      </label>
+      {{ form.submit(class="btn btn-primary") }}
+    </form>
+
+    <p class="auth-foot">Authorized DHIS2 access required &middot; Credentials are not retained</p>
+  </main>
+</body>
+</html>

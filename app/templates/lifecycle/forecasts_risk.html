@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% import "lifecycle/_lifecycle.html" as ui %}
+{% import "_icons.html" as icons %}
+{% block title %}Forecasts &amp; Risk &mdash; {{ app_name }}{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+{% endblock %}
+
+{% block content %}
+<div>
+  {{ ui.page_head(
+      "Forecasts & Risk",
+      "This page presents published future malaria case estimates and district risk classifications.") }}
+
+  {% call ui.how_to_read() %}
+    The selected model predicts the <strong>target week only</strong>; intermediate weekly
+    forecasts are not generated. Predicted counts and surge risk may come from different
+    validated models. High or Very High risk is an early-warning signal for review — it is
+    <strong>not</strong> confirmation of an outbreak.
+  {% endcall %}
+
+  <div class="filters-inline" role="group" aria-label="Forecast filters">
+    <span class="filter-inline-item">
+      <label class="filter-label" for="fc-issue">Issue week</label>
+      <select id="fc-issue" class="filter-select" {% if (filters.issues|length) <= 1 %}disabled{% endif %}>
+        {% for issue in filters.issues %}
+        <option value="{{ issue.issue_year }}-{{ issue.issue_week }}" {% if loop.first %}selected{% endif %}>{{ issue.issue_label }}</option>
+        {% else %}<option value="">No production issue</option>{% endfor %}
+      </select>
+    </span>
+    <span class="filter-inline-item">
+      <label class="filter-label" for="fc-horizon">Horizon</label>
+      <select id="fc-horizon" class="filter-select">
+        {% for h in filters.horizons %}<option value="{{ h.value }}" {% if h.value == default_horizon %}selected{% endif %}>{{ h.label }}</option>
+        {% else %}<option value="4">4 weeks</option>{% endfor %}
+      </select>
+    </span>
+    <span class="filter-inline-item">
+      <label class="filter-label" for="fc-district">District</label>
+      <select id="fc-district" class="filter-select">
+        <option value="all" selected>All Districts (Uganda)</option>
+        {% for d in filters.districts %}<option value="{{ d.district_id }}">{{ d.district_name }}</option>{% endfor %}
+      </select>
+    </span>
+  </div>
+
+  <section class="kpi-row" aria-label="Forecast summary" aria-live="polite">
+    <article class="kpi-card"><div class="kpi-label">Issue &rarr; target week</div><div class="kpi-value" id="fc-target">&mdash;</div><div class="kpi-empty" id="fc-scope">&mdash;</div></article>
+    <article class="kpi-card"><div class="kpi-label">Count model</div><div class="kpi-value" id="fc-count-model">&mdash;</div><div class="kpi-empty">Predicted cases</div></article>
+    <article class="kpi-card"><div class="kpi-label">Surge model</div><div class="kpi-value" id="fc-surge-model">&mdash;</div><div class="kpi-empty">Risk assessment</div></article>
+    <article class="kpi-card"><div class="kpi-label">Districts at surge risk</div><div class="kpi-value" id="fc-atrisk">&mdash;</div><div class="kpi-empty">High or Very High</div></article>
+  </section>
+  <div class="state-block state-error" id="fc-summary-state" role="status" hidden></div>
+
+  {# Selected-district interpretation (shown only when a single district is chosen). #}
+  <section class="grid-single" id="fc-district-panel" hidden>
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title" id="fc-di-title">District interpretation</h2></header>
+      <p class="panel-subhead" id="fc-di-models"></p>
+      <div class="panel-body">
+        <div class="di-grid">
+          <div class="di-item"><span class="di-label">Risk level</span><span class="di-value" id="fc-di-risk">&mdash;</span></div>
+          <div class="di-item"><span class="di-label" id="fc-di-count-label">Count-model predicted cases</span><span class="di-value" id="fc-di-count">&mdash;</span></div>
+          <div class="di-item"><span class="di-label" id="fc-di-surge-label">Surge-model predicted cases</span><span class="di-value" id="fc-di-surge">&mdash;</span></div>
+          <div class="di-item"><span class="di-label">District threshold</span><span class="di-value" id="fc-di-threshold">&mdash;</span></div>
+          <div class="di-item"><span class="di-label">Surge score (cases)</span><span class="di-value" id="fc-di-score">&mdash;</span></div>
+          <div class="di-item"><span class="di-label">Reporting completeness</span><span class="di-value" id="fc-di-completeness">&mdash;</span></div>
+          <div class="di-item"><span class="di-label">Issue &rarr; target week</span><span class="di-value" id="fc-di-weeks">&mdash;</span></div>
+          <div class="di-item"><span class="di-label">Horizon</span><span class="di-value" id="fc-di-horizon">&mdash;</span></div>
+        </div>
+        <p class="lifecycle-note-body" id="fc-di-basis"></p>
+        <p class="lifecycle-strong">High or Very High risk is an early-warning signal for review. It does not confirm an outbreak.</p>
+      </div>
+    </article>
+  </section>
+
+  <section class="grid-primary">
+    <article class="panel panel-chart">
+      <header class="panel-head"><h2 class="panel-title">Observed cases &amp; target-week forecast</h2></header>
+      <div class="panel-body">
+        <div class="chart-wrap"><canvas id="fc-chart" role="img" aria-label="Observed malaria cases and the target-week forecast"></canvas></div>
+        <div class="state-block" id="fc-chart-state" role="status">Loading&hellip;</div>
+        <p class="panel-src" id="fc-chart-note"></p>
+      </div>
+    </article>
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title">District risk map</h2></header>
+      <div class="panel-body map-body">
+        <div id="fc-map" class="map-canvas" role="img" aria-label="District surge risk choropleth"></div>
+        <div class="state-block" id="fc-map-state" role="status">Loading&hellip;</div>
+      </div>
+      <div class="map-legend"><span class="lg"><i class="sw sw-vhigh"></i>Very High</span><span class="lg"><i class="sw sw-high"></i>High</span><span class="lg"><i class="sw sw-mod"></i>Moderate</span><span class="lg"><i class="sw sw-low"></i>Low</span><span class="lg"><i class="sw sw-nodata"></i>No data</span></div>
+    </article>
+  </section>
+
+  <section class="grid-single">
+    <article class="panel">
+      <header class="panel-head">
+        <h2 class="panel-title">Districts at Surge Risk</h2>
+        <div class="panel-tools"><label class="sr-only" for="fc-search">Search districts</label>
+          <input class="input input-sm" id="fc-search" type="search" placeholder="Search district…" autocomplete="off"></div>
+      </header>
+      <p class="panel-subhead" id="fc-risk-subhead"></p>
+      <div class="panel-body">
+        <div class="table-scroll table-scroll-tall"><table class="data-table" id="fc-risk-table"><thead><tr>
+          <th class="sortable" data-key="district_name" data-type="text" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">District</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+          <th class="sortable" data-key="risk_rank" data-type="number" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Risk</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+          <th class="sortable" data-key="predicted_cases" data-type="number" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Predicted cases</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+          <th class="sortable" data-key="threshold_used" data-type="number" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Threshold</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+          <th class="sortable" data-key="predicted_surge_score" data-type="number" aria-sort="none"><button type="button" class="th-sort"><span class="th-label">Surge score</span><span class="th-arrow" aria-hidden="true"></span></button></th>
+        </tr></thead><tbody id="fc-risk-body"></tbody></table></div>
+        <div class="state-block" id="fc-risk-state" role="status">Loading&hellip;</div>
+        <nav class="pager" id="fc-pager" aria-label="Risk table pages" hidden>
+          <button type="button" class="pager-btn" id="fc-prev">&larr; Previous</button>
+          <span class="pager-status" id="fc-page-status" role="status" aria-live="polite"></span>
+          <button type="button" class="pager-btn" id="fc-next">Next &rarr;</button>
+        </nav>
+        <p class="panel-src" id="fc-risk-note"></p>
+      </div>
+    </article>
+  </section>
+
+  {{ ui.limitations([
+      "Only the published issue week is shown; no historical production issues are invented.",
+      "The model predicts the target week only; no intermediate weekly path is drawn.",
+      "Prediction intervals are shown only when the count model supplies them.",
+      "High or Very High risk warrants review; it does not confirm an outbreak."]) }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='js/forecasts.js') }}" defer></script>
+{% endblock %}

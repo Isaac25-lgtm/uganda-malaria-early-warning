@@ -1,0 +1,60 @@
+{% extends "reports/print/_print_base.html" %}
+{% block report_body %}
+{% set h = meta.horizon_weeks %}
+<section class="print-section">
+  <h2>Count forecasting metrics (horizon {{ h }} weeks)</h2>
+  <table class="print-table"><thead><tr><th>Model</th><th>Scope</th><th class="num">MAE</th>
+    <th class="num">RMSE</th><th class="num">MAPE</th><th class="num">WAPE</th><th class="num">R&sup2;</th><th>Selected</th></tr></thead>
+  <tbody>{% for r in ctx.performance.rows %}{% if r.horizon|string == h|string %}
+    <tr><td>{{ r.model_name }}</td><td>{{ r.model_scope }}</td>
+      <td class="num">{{ '{:,.1f}'.format(r.mae) if r.mae is not none else '—' }}</td>
+      <td class="num">{{ '{:,.1f}'.format(r.rmse) if r.rmse is not none else '—' }}</td>
+      <td class="num">{{ '{:,.1f}'.format(r.mape) if r.mape is not none else '—' }}</td>
+      <td class="num">{{ '{:,.1f}'.format(r.wape) if r.wape is not none else '—' }}</td>
+      <td class="num">{{ '{:,.3f}'.format(r.r_squared) if r.r_squared is not none else '—' }}</td>
+      <td>{{ 'Count' if r.selected_for_count else '—' }}</td></tr>
+  {% endif %}{% endfor %}</tbody></table>
+</section>
+<section class="print-section">
+  <h2>Surge detection metrics (horizon {{ h }} weeks)</h2>
+  <table class="print-table"><thead><tr><th>Model</th><th class="num">Sensitivity</th><th class="num">Specificity</th>
+    <th class="num">Precision</th><th class="num">F1</th><th class="num">AUC</th><th>Selected</th></tr></thead>
+  <tbody>{% for r in ctx.performance.rows %}{% if r.horizon|string == h|string %}
+    <tr><td>{{ r.model_name }}</td>
+      <td class="num">{{ '{:,.3f}'.format(r.sensitivity) if r.sensitivity is not none else '—' }}</td>
+      <td class="num">{{ '{:,.3f}'.format(r.specificity) if r.specificity is not none else '—' }}</td>
+      <td class="num">{{ '{:,.3f}'.format(r.precision) if r.precision is not none else '—' }}</td>
+      <td class="num">{{ '{:,.3f}'.format(r.f1) if r.f1 is not none else '—' }}</td>
+      <td class="num">{{ '{:,.3f}'.format(r.auc) if r.auc is not none else '—' }}</td>
+      <td>{{ 'Surge' if r.selected_for_surge else '—' }}</td></tr>
+  {% endif %}{% endfor %}</tbody></table>
+  <p class="print-note">Accuracy is available in the underlying artifact but is <strong>not used for model selection</strong>,
+  because surge weeks are rare and accuracy can be high while most surges are missed.</p>
+</section>
+<section class="print-section">
+  <h2>Model selection</h2>
+  <table class="print-kv"><tbody>
+    <tr><th scope="row">Selected count model</th><td>{{ ctx.selection.selected_count_model }}</td></tr>
+    <tr><th scope="row">Count selection rule</th><td>{{ ctx.selection.selection_rules.count }}</td></tr>
+    <tr><th scope="row">Selected surge model</th><td>{{ ctx.selection.selected_surge_model }}</td></tr>
+    <tr><th scope="row">Surge selection rule</th><td>{{ ctx.selection.selection_rules.surge }}</td></tr>
+    <tr><th scope="row">Winner recalculated</th><td>No &mdash; published evidence is used</td></tr>
+  </tbody></table>
+</section>
+<section class="print-section">
+  <h2>Validation method</h2>
+  <ul>{% for s in ctx.validation.statements %}<li>{{ s }}</li>{% endfor %}</ul>
+</section>
+{% if ctx.importance and ctx.importance.features %}
+<section class="print-section print-break">
+  <h2>Feature importance &mdash; {{ ctx.importance.model_name }}</h2>
+  <p class="print-note">{{ ctx.importance.importance_definition }}</p>
+  <table class="print-table"><thead><tr><th class="num">Rank</th><th>Feature</th><th>Family</th><th class="num">Share %</th></tr></thead>
+  <tbody>{% for f in ctx.importance.features %}
+    <tr><td class="num">{{ f.rank }}</td><td>{{ f.label }}</td><td>{{ f.family }}</td>
+      <td class="num">{{ '{:,.2f}'.format(f.normalized_percentage) }}</td></tr>
+  {% endfor %}</tbody></table>
+  <ul>{% for l in ctx.importance_limitations %}<li>{{ l }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endblock %}

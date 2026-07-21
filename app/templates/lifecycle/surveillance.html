@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% import "lifecycle/_lifecycle.html" as ui %}
+{% block title %}Surveillance Data &mdash; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div data-lifecycle-page data-endpoint="/api/lifecycle/surveillance">
+  {{ ui.page_head(
+      "Surveillance Data",
+      "This page shows the weekly malaria and reporting data received from DHIS2 before modelling.") }}
+
+  {% call ui.how_to_read() %}
+    These are counts of surveillance records received, not a measure of malaria burden.
+    A <strong>missing report</strong> means no value was received for a district-week; an
+    <strong>explicit zero</strong> means a value of zero was reported. Missing reports are
+    never converted to zero.
+  {% endcall %}
+
+  <section class="kpi-row" aria-label="Surveillance summary" aria-live="polite">
+    {{ ui.stat("Latest malaria week", "latest_week_label", hint="Observed") }}
+    {{ ui.stat("Received records", "received_district_weeks", "num", hint="District-weeks", accent="green") }}
+    {{ ui.stat("Missing district-weeks", "missing_district_weeks", "num", hint="Absent rows", accent="red") }}
+    {{ ui.stat("Reporting completeness", "latest_week_reporting_completeness", "pct", hint="Latest week", accent="teal") }}
+  </section>
+
+  <section class="grid-secondary-2">
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title">Coverage &amp; record status</h2></header>
+      <div class="panel-body">
+        <table class="data-table">
+          <tbody>
+            <tr><td>Coverage period</td><td class="num"><span data-field="coverage_start"></span> &rarr; <span data-field="coverage_end"></span></td></tr>
+            <tr><td>Expected district-weeks</td><td class="num" data-field="expected_district_weeks" data-format="num"></td></tr>
+            <tr><td>Received district-weeks</td><td class="num" data-field="received_district_weeks" data-format="num"></td></tr>
+            <tr><td>Missing district-weeks <span class="cell-missing">(absent rows)</span></td><td class="num" data-field="missing_district_weeks" data-format="num"></td></tr>
+            <tr><td>Explicit-zero records</td><td class="num" data-field="explicit_zero_records" data-format="num"></td></tr>
+            <tr><td>Active districts</td><td class="num" data-field="active_districts" data-format="num"></td></tr>
+            <tr><td>Latest-week confirmed cases</td><td class="num" data-field="latest_week_confirmed_cases" data-format="num"></td></tr>
+          </tbody>
+        </table>
+        {{ ui.state_block() }}
+      </div>
+      <p class="panel-src"><span data-field="data_element"></span> &middot; coverage verified against the database.</p>
+    </article>
+
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title">Missing vs zero</h2></header>
+      <div class="panel-body">
+        {{ ui.note("Missing report", "No malaria value was received for the district-week.", "warn") }}
+        {{ ui.note("Explicit zero", "A value of zero was explicitly reported.", "info") }}
+        <p class="lifecycle-strong">Missing reports are not converted to zero.</p>
+        {{ ui.note("Reporting completeness",
+            "Reporting completeness reflects HMIS 033b form submission. It does not measure malaria burden.",
+            "method") }}
+      </div>
+    </article>
+  </section>
+
+  {{ ui.limitations([
+      "Counts describe received surveillance records, not true malaria burden.",
+      "Reporting completeness is HMIS 033b submission, not malaria burden.",
+      "Missing reports are left missing and are never treated as zero.",
+      "DHIS2 credentials and internal endpoints are never shown on this page."]) }}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/lifecycle.js') }}" defer></script>
+{% endblock %}

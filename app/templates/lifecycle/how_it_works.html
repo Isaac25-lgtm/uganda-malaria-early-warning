@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% import "lifecycle/_lifecycle.html" as ui %}
+{% block title %}How It Works &mdash; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div>
+  {{ ui.page_head(
+      "How It Works",
+      "A plain-language guide to how surveillance, climate and models produce district malaria early-warning signals.") }}
+
+  <section class="kpi-row" aria-label="System status">
+    <article class="kpi-card">
+      <div class="kpi-label">Overall pipeline state</div>
+      <div class="kpi-value" id="hiw-overall">&mdash;</div>
+      <div class="kpi-empty">From published evidence</div>
+    </article>
+    <article class="kpi-card">
+      <div class="kpi-label">Production forecasts</div>
+      <div class="kpi-value" id="hiw-rows">&mdash;</div>
+      <div class="kpi-empty" id="hiw-issue">Issue week</div>
+    </article>
+    <article class="kpi-card">
+      <div class="kpi-label">Active districts</div>
+      <div class="kpi-value" id="hiw-districts">&mdash;</div>
+      <div class="kpi-empty">Verified</div>
+    </article>
+    <article class="kpi-card">
+      <div class="kpi-label">Models &amp; horizons</div>
+      <div class="kpi-value" id="hiw-models">&mdash;</div>
+      <div class="kpi-empty">Approved</div>
+    </article>
+  </section>
+
+  <section class="grid-single">
+    <article class="panel">
+      <header class="panel-head"><h2 class="panel-title">The seven stages</h2></header>
+      <div class="panel-body">
+        <ol class="stage-flow" id="hiw-stages"></ol>
+        <div class="state-block" id="hiw-state" role="status">Loading&hellip;</div>
+      </div>
+    </article>
+  </section>
+
+  <section class="grid-single">
+    <article class="panel panel-note">
+      <div class="panel-body">
+        <p class="lifecycle-strong">This system supports review and early action. It does not
+        replace epidemiological judgement or official outbreak confirmation.</p>
+      </div>
+    </article>
+  </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  "use strict";
+  var STAGES = [
+    ["Surveillance Data", "Weekly confirmed malaria cases and reporting completeness are received from DHIS2.", "dhis2_malaria_panel"],
+    ["Data Quality & Preparation", "Records are matched to 146 districts, validated, and prepared without zero-filling missing values.", "modelling_dataset"],
+    ["Climate Signals", "Rainfall, temperature and humidity are linked and lagged as supporting predictors.", "climate_lags"],
+    ["Model Evaluation", "Four approved models are tested with chronological rolling-origin validation.", "models_and_forecasts"],
+    ["Production Forecasting", "Selected models produce target-week forecasts for the published issue week.", "models_and_forecasts"],
+    ["Risk Interpretation", "Predicted cases are compared with a district threshold to flag districts for review.", "visible_dashboard"],
+    ["Decision Support", "Results support review and early action; they do not confirm an outbreak.", "visible_dashboard"]
+  ];
+  function state(msg, kind) {
+    var el = document.getElementById("hiw-state");
+    el.hidden = !msg; el.textContent = msg || ""; el.className = "state-block" + (kind ? " state-" + kind : "");
+  }
+  fetch("/api/system/pipeline-status", { credentials: "same-origin", headers: { Accept: "application/json" } })
+    .then(function (r) {
+      var t = r.headers.get("content-type") || "";
+      if (t.indexOf("application/json") === -1) throw { status: r.status };
+      return r.json().then(function (b) { if (!r.ok) throw { status: r.status }; return b; });
+    })
+    .then(function (body) {
+      var d = body.data; if (!d) { state("System status is not available yet.", "empty"); return; }
+      state("", null);
+      document.getElementById("hiw-overall").textContent = d.overall_state || "—";
+      document.getElementById("hiw-rows").textContent = (d.production_forecast_rows || "—").toLocaleString ? Number(d.production_forecast_rows).toLocaleString("en-GB") : d.production_forecast_rows;
+      document.getElementById("hiw-issue").textContent = d.issue_label ? "Issue " + d.issue_label : "Issue week";
+      document.getElementById("hiw-districts").textContent = d.active_districts;
+      document.getElementById("hiw-models").textContent = (d.models ? d.models.length : "—") + " / " + (d.horizons ? d.horizons.length : "—");
+      var comps = d.components || {};
+      document.getElementById("hiw-stages").innerHTML = STAGES.map(function (s, i) {
+        var status = (comps[s[2]] || {}).status;
+        return '<li class="stage-item">' +
+          (status ? '<span class="stage-status stage-' + String(status).toLowerCase() + '">' + status + "</span>" : "") +
+          '<span class="stage-title">' + (i + 1) + ". " + s[0] + "</span>" +
+          '<span class="stage-detail">' + s[1] + "</span></li>";
+      }).join("");
+    })
+    .catch(function (err) {
+      state(err && err.status === 401 ? "Your session has ended. Sign in again." : "System status could not be loaded.", "error");
+    });
+})();
+</script>
+{% endblock %}
