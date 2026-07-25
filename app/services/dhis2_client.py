@@ -284,6 +284,7 @@ class DHIS2Client:
         )
 
     def fetch_org_units_at_level(self, level: int) -> list[dict[str, Any]]:
+        # Presentation evidence: retrieve DHIS2 district metadata before any case values are mapped.
         payload = self.get(
             "/api/organisationUnits.json",
             params={
@@ -331,6 +332,7 @@ class DHIS2Client:
         """Query DHIS2 analytics for one dx, a list of weekly periods and org-unit level."""
         if not periods:
             raise DHIS2ConfigError("At least one DHIS2 period is required.")
+        # Presentation evidence: cases are requested for the same organisation-unit level and weeks.
         return self.get(
             "/api/analytics",
             params=[

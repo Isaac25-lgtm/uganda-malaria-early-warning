@@ -606,6 +606,7 @@ def prepare_raw_boundaries(
             summary.unmatched_boundary_names.append(raw_name)
             continue
 
+        # Presentation evidence: the district shape receives the same key already assigned to DHIS2 case records.
         summary.matched_feature_count += 1
         prepared_features.append(
             {

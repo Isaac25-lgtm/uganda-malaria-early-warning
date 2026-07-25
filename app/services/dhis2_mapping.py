@@ -82,6 +82,7 @@ class OrgUnitMappingSummary:
 
     @property
     def one_to_one_passed(self) -> bool:
+        # Presentation evidence: the pipeline stops unless every active district has one, and only one, DHIS2 unit.
         return (
             self.active_reference_count == EXPECTED_ACTIVE_DISTRICTS
             and self.org_units_returned == EXPECTED_ACTIVE_DISTRICTS
@@ -173,6 +174,7 @@ def build_mapping_summary(
     alias_path: Path = DEFAULT_ALIAS_PATH,
     dry_run: bool = True,
 ) -> OrgUnitMappingSummary:
+    # Presentation evidence: names are checked once here; downstream joins use canonical district_id instead.
     aliases = load_aliases(alias_path)
     active_reference_rows = [row for row in reference_rows if row.active]
     summary = OrgUnitMappingSummary(

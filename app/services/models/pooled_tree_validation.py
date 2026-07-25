@@ -201,6 +201,12 @@ class PooledTreeValidationSummary(ValidationSummary):
                     "scope": (
                         "one national pooled count regressor and one class-balanced "
                         "surge classifier per horizon and fold"
+                        if self.model_scope == "national_pooled"
+                        else (
+                            "one count regressor and one class-balanced surge "
+                            "classifier per horizon and fold, trained only on the "
+                            "districts within one DHIS2 subregion"
+                        )
                     ),
                     "categorical_features": list(POOLED_CATEGORICAL_FEATURES),
                     "numeric_features": list(POOLED_NUMERIC_FEATURES),
@@ -250,25 +256,46 @@ def run_pooled_tree_validation(
     replace: bool = False,
     progress_callback: Callable[[dict[str, Any]], None] | None = None,
     record_pipeline_run: bool = True,
+    rows: list[dict[str, Any]] | None = None,
+    fixed_folds_by_horizon: dict[int, list[ValidationFold]] | None = None,
+    scope_signature: str | None = None,
+    model_scope_label: str = "national_pooled",
+    compute_permutation_importance: bool = True,
 ) -> PooledTreeValidationSummary:
-    """Run resumable national-pooled validation for Random Forest or XGBoost."""
+    """Run resumable pooled validation for Random Forest or XGBoost.
+
+    Defaults reproduce the national-pooled behaviour exactly. The optional
+    ``rows``, ``fixed_folds_by_horizon``, ``scope_signature`` and
+    ``model_scope_label`` arguments let a caller run the same leakage-safe engine
+    on a district-scoped subset (for the regional-pooling experiment) without
+    changing national output or duplicating this engine. When ``rows`` is
+    provided it is used verbatim; when ``fixed_folds_by_horizon`` is provided
+    those folds are used instead of building fresh folds, guaranteeing identical
+    origin and target dates across scopes.
+    """
     started = time.perf_counter()
     _validate_request(config, horizons, max_folds)
-    rows = read_modelling_dataset(dataset_path)
+    if rows is None:
+        rows = read_modelling_dataset(dataset_path)
     if not rows:
         raise PooledTreeValidationError(f"Modelling dataset is empty: {dataset_path}.")
     feature_spec = build_feature_spec(list(rows[0].keys()))
     _validate_feature_contract(rows[0].keys())
     districts = _districts(rows)
-    folds_by_horizon = {
-        horizon: build_rolling_origin_folds(rows, horizon=horizon, max_folds=max_folds)
-        for horizon in horizons
-    }
+    if fixed_folds_by_horizon is not None:
+        folds_by_horizon = {
+            horizon: list(fixed_folds_by_horizon.get(horizon, [])) for horizon in horizons
+        }
+    else:
+        folds_by_horizon = {
+            horizon: build_rolling_origin_folds(rows, horizon=horizon, max_folds=max_folds)
+            for horizon in horizons
+        }
     job_total = sum(len(folds) for folds in folds_by_horizon.values())
     summary = PooledTreeValidationSummary(
         model_name=config.model_name,
         model_key=config.model_key,
-        model_scope="national_pooled",
+        model_scope=model_scope_label,
         horizons=horizons,
         dry_run=dry_run,
         status="dry-run" if dry_run else "running",
@@ -309,6 +336,8 @@ def run_pooled_tree_validation(
         return summary
 
     dataset_signature = _dataset_signature(dataset_path)
+    if scope_signature is not None:
+        dataset_signature = {**dataset_signature, "scope": scope_signature}
     pipeline_run = _start_pipeline_run(
         config=config,
         summary=summary,
@@ -364,6 +393,7 @@ def run_pooled_tree_validation(
                         selected_parameters=selected_parameters,
                         selected_classifier_parameters=selected_classifier_parameters,
                         probability_cutoff=probability_cutoff,
+                        compute_permutation_importance=compute_permutation_importance,
                     )
                     _write_checkpoint(
                         checkpoint_path,
@@ -664,6 +694,7 @@ def _run_fold_job(
     selected_parameters: dict[str, Any],
     selected_classifier_parameters: dict[str, Any],
     probability_cutoff: float,
+    compute_permutation_importance: bool = True,
 ) -> dict[str, Any]:
     target_column = f"target_cases_h{fold.horizon}"
     target_date_column = f"target_week_start_date_h{fold.horizon}"
@@ -743,13 +774,17 @@ def _run_fold_job(
             horizon=fold.horizon,
             fold_number=fold_number,
         )
-        permutation_rows = _permutation_importance_rows(
-            config=config,
-            pipeline=pipeline,
-            validation_x=validation_x,
-            validation_y=_target_array(fold.validation_rows, target_column),
-            horizon=fold.horizon,
-            fold_number=fold_number,
+        permutation_rows = (
+            _permutation_importance_rows(
+                config=config,
+                pipeline=pipeline,
+                validation_x=validation_x,
+                validation_y=_target_array(fold.validation_rows, target_column),
+                horizon=fold.horizon,
+                fold_number=fold_number,
+            )
+            if compute_permutation_importance
+            else []
         )
         job["feature_importance"] = native_rows + permutation_rows
         contributions = _prediction_contributions(config, pipeline, validation_x, transformed_names)
@@ -1331,7 +1366,7 @@ def _model_card_payload(
         )
     return {
         "model_name": config.model_name,
-        "model_scope": "national_pooled",
+        "model_scope": summary.model_scope,
         "primary_task": "future malaria case-count regression and surge classification",
         "horizons_weeks": list(summary.horizons),
         "predictors_used": list(POOLED_FEATURES),

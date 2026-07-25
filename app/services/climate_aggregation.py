@@ -323,6 +323,7 @@ def _load_boundary_geodataframe(
     path: Path = PREPARED_BOUNDARY_PATH,
 ) -> Any:
     """Load the one approved prepared boundary after its canonical validation."""
+    # Presentation evidence: climate processing can use only the validated 146-district boundary file.
     proof = validate_prepared_boundary_for_climate(path)
     if not proof.ok:
         raise ClimateAggregationError(
@@ -772,6 +773,7 @@ def _aggregate_chirps_rainfall(
                 )
                 grid = grid_cache.get(signature)
                 if grid is None:
+                    # Presentation evidence: turn each full district polygon into raster zones; no centroid is used.
                     grid = _build_zone_grid(
                         gdf=aligned,
                         raster_crs=src.crs,
@@ -1006,6 +1008,7 @@ def _align_boundaries_to_crs(gdf: Any, raster_crs: Any, source_path: Path) -> An
         raise ClimateAggregationError(
             f"Could not compare boundary and raster CRS for {source_path}."
         ) from exc
+    # Presentation evidence: a district outline is transformed before measuring a raster in another CRS.
     return gdf if boundary_crs == target_crs else gdf.to_crs(target_crs)
 
 
@@ -1356,6 +1359,7 @@ def apply_processed_climate_to_features(
         return summary
 
     for climate_row in climate_rows:
+        # Presentation evidence: combine climate and surveillance only when district, year, and week all agree.
         feature = DistrictWeekFeature.query.filter_by(
             district_id=climate_row.district_id,
             epi_year=climate_row.epi_year,

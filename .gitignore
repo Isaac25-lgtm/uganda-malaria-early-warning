@@ -56,6 +56,7 @@ _browser*.py
 _inspect*.py
 _gov_check.py
 build_progress_presentation.py
+build_supervisor_integration_presentation.py
 era5_smoke_test.py
 
 # Internal working prompts and drafts

@@ -577,6 +577,7 @@ def _store_payload_rows(
             continue
         seen_keys.add(key)
 
+        # Presentation evidence: replace the source-specific DHIS2 UID with the approved common district key.
         district_id = district_by_orgunit.get(row.dhis2_orgunit_id)
         if district_id:
             summary.mapped_org_units.add(row.dhis2_orgunit_id)

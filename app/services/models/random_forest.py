@@ -104,3 +104,14 @@ def run_random_forest_validation(
         progress_callback=progress_callback,
         record_pipeline_run=record_pipeline_run,
     )
+
+
+def run_regional_random_forest_experiment(**kwargs: Any):
+    """Run the DHIS2-subregion pooling experiment for Random Forest.
+
+    Thin wrapper over the shared regional orchestration engine; experimental
+    only and never touches production artefacts.
+    """
+    from app.services.models.regional_tree_validation import run_regional_pooling_experiment
+
+    return run_regional_pooling_experiment(RANDOM_FOREST_CONFIG, **kwargs)

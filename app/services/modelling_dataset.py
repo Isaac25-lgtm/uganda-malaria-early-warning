@@ -504,6 +504,7 @@ def read_modelling_dataset(path: Path = DATASET_PATH) -> list[dict[str, Any]]:
 
 
 def _load_feature_rows(start_year: int, end_year: int) -> list[dict[str, Any]]:
+    # Presentation evidence: the final modelling panel retains the common district-week identity.
     rows = (
         DistrictWeekFeature.query.join(DistrictReference)
         .filter(
