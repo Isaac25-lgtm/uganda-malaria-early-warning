@@ -1,0 +1,5 @@
+# Exploratory weekly climate follow-up — 15 October 2026
+
+The completed original twelve-origin ablation gives RF point improvements of approximately 1–1.3 WAPE percentage points, but all origin-cluster intervals include zero. To assess stability over time, add exactly one history/time/district-only RF comparator on the same 92 weekly 2024–2025 targets as the full-climate 2020-start model already being fitted. Reuse the corrected horizon parameters; do not tune a reduced model separately. No additional family, predictor or operating cutoff is selected.
+
+This addition follows inspection of the twelve-origin development results and is explicitly exploratory. It does not change the locked 2026 protocol or use 2026 outcomes to tune a model. Assess paired WAPE/MAE/F2/precision/sensitivity with district-cluster and twelve-week moving-block intervals, reporting their limitations. Retain both positive and negative findings. Each horizon has 92 additional fits, 276 total. Run these in spare compute slots after the corresponding training-window worker finishes; no two processes own the same checkpoint.

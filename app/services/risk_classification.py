@@ -40,6 +40,13 @@ def classify_forecast_risk(
     probability = _decimal(surge_probability)
     cases = _decimal(predicted_cases)
     threshold = _decimal(threshold_used)
+    if probability is None and threshold is not None and threshold <= 0:
+        return RiskClassification(
+            NO_DATA_RISK,
+            "A positive district threshold is required for count-relative risk.",
+            "unavailable",
+            no_data=True,
+        )
     if predicted_surge_flag is None and probability is None and cases is None:
         return RiskClassification(
             risk_level=NO_DATA_RISK,

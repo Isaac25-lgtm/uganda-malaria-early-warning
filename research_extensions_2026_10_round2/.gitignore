@@ -1,0 +1,8 @@
+baseline_source/
+checkpoints/
+classical_jobs/
+results/
+*.log
+*.zip
+
+surge_checkpoints/

@@ -64,6 +64,7 @@ class CleanCaseValue:
     status: str
     predictor_interpolated: bool
     interpolation_gap_weeks: int | None = None
+    feature_available_from: date | None = None
 
 
 @dataclass(frozen=True)
@@ -262,6 +263,12 @@ def build_clean_case_series(
                 source_missing += 1
             interpolated, gap_size = _bounded_linear_interpolation(series, index)
             use_interpolation = observed_value is None and interpolated is not None
+            feature_available_from = None
+            if use_interpolation:
+                right = index + 1
+                while series[right] is None:
+                    right += 1
+                feature_available_from = weekly_dates[right]
             if use_interpolation:
                 if is_excluded:
                     interpolated_errors += 1
@@ -284,6 +291,7 @@ def build_clean_case_series(
                 status=status,
                 predictor_interpolated=use_interpolation,
                 interpolation_gap_weeks=gap_size if use_interpolation else None,
+                feature_available_from=feature_available_from,
             )
 
     registry_hash = hashlib.sha256(exclusion_path.read_bytes()).hexdigest()

@@ -1,0 +1,17 @@
+# Thesis update matrix
+
+Page numbers below explicitly distinguish PDF viewer pages from printed thesis pages. These are review instructions/evidence pointers, not replacement academic prose. The original PDF remains unchanged.
+
+| Location | Required revision decision | Evidence/status |
+| --- | --- | --- |
+| Abstract and Chapter 6 | Align headline performance and selected-model claims with the supervisor-approved corrected version; explain warnings/false alerts | First-round corrected counts; this round's availability sensitivities must not silently replace them |
+| Chapter 3 tuning and availability methods | Explain inner label embargo, case/label/reference cutoffs, preprocessing, exact estimator thread count and assumed source availability | `inner_boundary_audit.csv`, `worked_timelines.csv`, new source code and tuning JSON |
+| PDF p51 / printed p36, Tables 4.5-4.6 | RF 8w WAPE changes 38.5616 to 39.7440; XGBoost 12w changes 40.7035 to 39.2143. Recalculate relative baseline reductions and other selected count metrics consistently | `corrections_for_dissertation.csv`; original count table and corrected first-round results. The original seasonal benchmark is preserved separately |
+| PDF p52 / printed p37, model selection discussion | Separate count-WAPE point selection from warning-F2 selection; qualify constrained nonseasonal SARIMAX/fallback and unequal coverage | First-round strict common-sample table; new seasonal feasibility subset is supplementary |
+| PDF p53 / printed p38, Table 4.8 and following paragraph | Correct affected warning confusion counts and metrics consistently. The statement RF was selected in all six positions no longer holds for corrected count-WAPE point ranking | RF retains higher F2; 12w XGBoost lower WAPE point estimate has zero-including paired intervals |
+| PDF p54-55 / printed p39-40, Tables 4.9-4.10 and section 4.7.1 | Distinguish frozen adapted ARIMAX rescore from standardized refitting. Corrected 8w point ordering reverses; intervals include zero | First-round literature comparisons; source/convergence audit and small diagnostic rerun here. Original 0.33% relative vs 0.129 percentage-point distinction was already correct |
+| PDF p70-71 / printed p55-56, Chapter 6 | Remove universal-winner implications; qualify climate evidence, prototype utility, baseline strength and reporting-vintage limitations | Climate support is exploratory; equal-information results and uncertainty here; 2026 retrospective warning limitations remain |
+| Limitations and recommendations | Explain seasonal-reference fallback/support, district heterogeneity, dependency, information parity, uncertain issue times and new-experiment selection | Reference diagnostics, block-length sensitivity and matched comparisons; no calibrated outbreak probability or operational benefit established |
+| Signatures/objectives/spacing/poster appendix | Manual authoritative-document actions with supervisor/template confirmation | First-round S01-S20 matrix retained; no automatic thesis/PDF rewrite |
+
+Revised results need consistent table/figure/caption version labels throughout. Student writes/reviews final academic text. Confirmed incorrect results must be corrected; student and supervisor decide how to present the correction account, with submitted values retained only as provenance. Pending REC/MoH status and any use of 2026 results require the actual institutional decision; local tool access is not institutional approval.

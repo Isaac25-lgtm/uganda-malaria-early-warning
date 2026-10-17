@@ -499,7 +499,7 @@ def _methods(req: ReportRequest) -> dict[str, Any]:
          "The district threshold is the training-only 75th percentile in the target epidemiological week +/-2 weeks. "
          "The confirmed epidemic year 2022 remains in count-model training but is excluded from the normal-reference threshold."),
         ("Surge classification",
-         "Random Forest and XGBoost use a separate class-balanced probability classifier, with its cutoff selected inside chronological training data. The count-threshold rule is retained as a benchmark."),
+         "The published operational selection compares forecast counts with district seasonal thresholds. Separate class-balanced classifiers were evaluated but were not retained for the published issue; classifier probabilities must not be presented as operational warning probabilities."),
         ("Forecast publication",
          "Forecasts are published for a single production issue week and predict the target week only."),
         ("Main limitations", " ".join(CORE_LIMITATIONS)),

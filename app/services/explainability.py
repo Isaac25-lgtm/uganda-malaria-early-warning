@@ -295,13 +295,13 @@ def _validate_selection(payload: Any) -> Any:
                  f"count winner for horizon {horizon} is not an approved model.")
         _require(surge.get("model_name") in APPROVED_MODEL_NAMES,
                  f"surge winner for horizon {horizon} is not an approved model.")
-        # Winning metrics must be finite: count needs WAPE or RMSE; surge needs F1 and sensitivity.
+        # Winning metrics must be finite: count needs WAPE or RMSE; surge needs F2 and sensitivity.
         cm = count.get("count_metrics")
         _require(_finite_present(cm, "wape") or _finite_present(cm, "rmse"),
                  f"count winner for horizon {horizon} has no finite WAPE or RMSE.")
         sm = surge.get("surge_metrics")
-        _require(_finite_present(sm, "f1") and _finite_present(sm, "sensitivity"),
-                 f"surge winner for horizon {horizon} has no finite F1 and sensitivity.")
+        _require(_finite_present(sm, "f2") and _finite_present(sm, "sensitivity"),
+                 f"surge winner for horizon {horizon} has no finite F2 and sensitivity.")
 
         # Exactly four unique approved model comparisons for this horizon.
         compared = [m for m in root["all_models_compared"]
@@ -1027,8 +1027,8 @@ def build_model_selection(horizon: int) -> dict[str, Any]:
         },
         "surge_selection": {
             "model_name": surge.get("model_name"),
-            "metric_name": "F1",
-            "metric_value": surge_metrics.get("f1"),
+            "metric_name": "F2",
+            "metric_value": surge_metrics.get("f2"),
             "tie_breaker_name": "sensitivity",
             "tie_breaker_value": surge_metrics.get("sensitivity"),
             "metric_rule": surge.get("metric_rule") or rationale.get("surge"),

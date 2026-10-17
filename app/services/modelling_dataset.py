@@ -317,16 +317,17 @@ def assemble_dataset_rows(
             lag_value = clean_values.get(
                 (district_id, origin_date - timedelta(weeks=lag))
             )
-            out[f"cases_lag_{lag}"] = _clean_feature_value(lag_value)
+            feature_value = _clean_feature_value(lag_value, as_of=origin_date)
+            out[f"cases_lag_{lag}"] = feature_value
             out[f"cases_lag_{lag}_interpolated"] = int(bool(
-                lag_value and lag_value.predictor_interpolated
+                lag_value and lag_value.predictor_interpolated and feature_value is not None
             ))
         for window in ROLLING_WINDOWS:
             previous_values = [
                 clean_values.get((district_id, origin_date - timedelta(weeks=offset)))
                 for offset in range(1, window + 1)
             ]
-            feature_values = [_clean_feature_value(item) for item in previous_values]
+            feature_values = [_clean_feature_value(item, as_of=origin_date) for item in previous_values]
             out[f"cases_rolling_mean_{window}"] = _mean_with_minimum(
                 feature_values,
                 minimum=MIN_ROLLING_OBSERVATIONS[window],
@@ -339,7 +340,8 @@ def assemble_dataset_rows(
                 and not item.predictor_interpolated
             )
             out[f"cases_rolling_interpolated_count_{window}"] = sum(
-                1 for item in previous_values if item and item.predictor_interpolated
+                1 for item, value in zip(previous_values, feature_values)
+                if item and item.predictor_interpolated and value is not None
             )
         for horizon in HORIZONS:
             target_date = origin_date + timedelta(weeks=horizon)
@@ -579,8 +581,12 @@ def _source_case_values(
     return values
 
 
-def _clean_feature_value(value: CleanCaseValue | None) -> Decimal | None:
+def _clean_feature_value(value: CleanCaseValue | None, *, as_of: date) -> Decimal | None:
     if value is None or value.cases_for_features is None:
+        return None
+    if value.predictor_interpolated and (
+        value.feature_available_from is None or value.feature_available_from > as_of
+    ):
         return None
     return value.cases_for_features
 

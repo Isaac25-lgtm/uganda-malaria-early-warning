@@ -51,7 +51,7 @@
         <h3 class="panel-subhead">The four approved models</h3>
         <ul class="note-list">
           <li><strong>Baseline/Naive</strong> — a simple reference forecast. Its role is a benchmark: other models must beat it. Strength: transparent and robust. Limitation: ignores climate and cross-district signal.</li>
-          <li><strong>SARIMAX</strong> — a district-specific seasonal time-series model with climate regressors. Strength: captures per-district seasonality. Limitation: district-specific fitting is sensitive to short or gappy district histories.</li>
+          <li><strong>SARIMAX</strong> — a district-specific time-series procedure with climate regressors. The saved evaluation used nonseasonal ARIMAX and regression fallback fits: the annual seasonal candidate lacked sufficient history at the first selection fold. Review fallback and prediction coverage when comparing it with other models.</li>
           <li><strong>Random Forest</strong> — a national-pooled tree ensemble. Role: the model selected for both count prediction and operational surge warning at all three horizons. Strength: captures non-linear interactions. Limitation: pooled importance may not describe every district.</li>
           <li><strong>XGBoost</strong> — a national-pooled gradient-boosted ensemble, evaluated as a count candidate but not selected in this dataset. Strength: regularised non-linear modelling. Limitation: importance is model-specific and not causal.</li>
         </ul>

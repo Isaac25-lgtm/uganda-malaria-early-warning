@@ -1,0 +1,14 @@
+{
+  "recorded_at_utc": "2026-10-15T06:10:32.642175+00:00",
+  "new_tree_fit_threads": 3,
+  "new_tree_tuning_threads": 3,
+  "estimator_seed": 24024,
+  "concurrent_horizon_workers": 2,
+  "parameter_candidates_per_model_horizon_delay": 3,
+  "maximum_worker_passes_per_horizon": 2,
+  "maximum_seconds_per_worker_pass": 10800,
+  "scope": "Availability assumptions, fixed earliest-fold tuning, no 2026 fitting/selection.",
+  "tree_code_sha256": "dd26cb1edf813c8561dc906e44f85c3dd0e45f68c4c382495ae635470cba309c",
+  "new_surveillance_access": false,
+  "cap": "2026-06-30"
+}

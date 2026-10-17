@@ -15,7 +15,7 @@
       <select class="filter-select" id="filter-issue" {% if filters.issues|length <= 1 %}disabled{% endif %}>
         {% for issue in filters.issues %}
         <option value="{{ issue.issue_year }}-{{ issue.issue_week }}" {% if loop.first %}selected{% endif %}>
-          {{ issue.issue_label }}{% if issue.issue_week_start_date %} &middot; issued {{ issue.issue_week_start_date }}{% endif %}
+          {{ issue.issue_label }}{% if issue.issue_week_start_date %} &middot; origin {{ issue.issue_week_start_date }}{% endif %}
         </option>
         {% else %}
         <option value="">No production issue available</option>

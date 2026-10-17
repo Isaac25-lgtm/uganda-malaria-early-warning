@@ -1,0 +1,8 @@
+{
+  "core_threads": 6,
+  "expanded_threads": 6,
+  "expanded_threads_by_horizon": {
+    "8": 6
+  },
+  "reason": "Core RF/XGB and prespecified 2026 fitting finished. Six threads for expanded windows, with one BLAS thread for remaining SARIMAX jobs."
+}

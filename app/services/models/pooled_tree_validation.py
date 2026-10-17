@@ -33,7 +33,7 @@ from app.services.model_validation import (
 from app.services.modelling_dataset import DATASET_PATH, HORIZONS, read_modelling_dataset
 
 RANDOM_STATE = 24024
-CHECKPOINT_VERSION = 2
+CHECKPOINT_VERSION = 3
 
 POOLED_CATEGORICAL_FEATURES = ("district_id",)
 POOLED_NUMERIC_FEATURES = (
@@ -97,6 +97,7 @@ DISTRICT_METRIC_COLUMNS = (
     "district_id",
     "district_name",
     "horizon",
+    "surge_method",
     "status",
     "completed_folds",
     "failed_folds",
@@ -433,6 +434,7 @@ def run_pooled_tree_validation(
             folds_by_horizon=folds_by_horizon,
             jobs=jobs,
             predictions=predictions,
+            operational_methods=summary.operational_surge_method_by_horizon,
         )
         summary.row_counts["training_missing_target_exclusions"] = sum(
             int(job.get("training_missing_target_exclusions", 0)) for job in jobs
@@ -486,6 +488,21 @@ def run_pooled_tree_validation(
         raise
 
 
+def _chronological_inner_split(rows, *, horizon, holdout_dates):
+    """One inner fit may see labels only through the earliest held-out origin.
+
+    Splitting on target dates alone admits labels h-1 weeks after that origin.
+    The same embargo is used for regression and classifier tuning.
+    """
+    target = f"target_week_start_date_h{horizon}"
+    validation = [r for r in rows if str(r[target]) in holdout_dates]
+    if not validation:
+        return [], []
+    cutoff = min(str(r["week_start_date"]) for r in validation)
+    training = [r for r in rows if str(r[target]) not in holdout_dates and str(r[target]) <= cutoff]
+    return training, validation
+
+
 def _select_horizon_parameters(
     config: PooledTreeConfig, folds: list[ValidationFold]
 ) -> dict[str, Any]:
@@ -511,8 +528,9 @@ def _select_horizon_parameters(
             "available_target_weeks": len(unique_dates),
         }
     holdout_dates = set(unique_dates[-holdout_weeks:])
-    inner_train = [row for row in rows if str(row[target_date_column]) not in holdout_dates]
-    inner_validation = [row for row in rows if str(row[target_date_column]) in holdout_dates]
+    inner_train, inner_validation = _chronological_inner_split(
+        rows, horizon=folds[0].horizon, holdout_dates=holdout_dates
+    )
     if not inner_train or not inner_validation:
         return {
             "status": "default_empty_inner_split",
@@ -588,15 +606,18 @@ def _select_horizon_classifier(
     if len(unique_dates) <= holdout_weeks + 8:
         return {**fallback, "available_target_weeks": len(unique_dates)}
     holdout_dates = set(unique_dates[-holdout_weeks:])
-    inner_train = [row for row in rows if str(row[target_date_column]) not in holdout_dates]
-    inner_validation = [row for row in rows if str(row[target_date_column]) in holdout_dates]
+    inner_train, inner_validation = _chronological_inner_split(
+        rows, horizon=fold.horizon, holdout_dates=holdout_dates
+    )
     if not inner_train or not inner_validation:
         return {**fallback, "status": "default_empty_inner_split"}
 
     train_x = _feature_frame(inner_train)
     validation_x = _feature_frame(inner_validation)
-    train_y = _surge_target_array(inner_train, inner_train, fold.horizon)
-    validation_y = _surge_target_array(inner_train, inner_validation, fold.horizon)
+    inner_cutoff = min(str(row["week_start_date"]) for row in inner_validation)
+    reference = [row for row in fold.train_rows if str(row["week_start_date"]) <= inner_cutoff]
+    train_y = _surge_target_array(reference, inner_train, fold.horizon)
+    validation_y = _surge_target_array(reference, inner_validation, fold.horizon)
     if len(set(bool(value) for value in train_y)) < 2:
         return {
             **fallback,
@@ -618,6 +639,7 @@ def _select_horizon_classifier(
                     [bool(value) for value in validation_y],
                     [float(value) >= cutoff for value in probabilities],
                     [Decimal(str(value)) for value in probabilities],
+                    score_is_probability=True,
                 )
                 results.append(
                     {
@@ -1166,6 +1188,7 @@ def _populate_summary_metrics(
             summary.threshold_proof.append(
                 {
                     "horizon": horizon,
+                    "surge_method": operational_method,
                     "district_id": first.district_id,
                     "origin_date": first.origin_date.isoformat(),
                     "target_date": first.target_date.isoformat(),
@@ -1225,7 +1248,7 @@ def _metric_float(
         return default
 
 
-def _prediction_record(row: dict[str, Any]) -> PredictionRecord:
+def _prediction_record(row: dict[str, Any], *, surge_method="dedicated_classifier") -> PredictionRecord:
     return PredictionRecord(
         district_id=str(row["district_id"]),
         horizon=int(row["horizon"]),
@@ -1235,8 +1258,9 @@ def _prediction_record(row: dict[str, Any]) -> PredictionRecord:
         predicted=Decimal(str(row["predicted_cases"])),
         threshold=Decimal(str(row["district_surge_threshold"])),
         actual_surge=_bool(row["observed_surge_status"]),
-        predicted_surge=_bool(row["predicted_surge_classification"]),
-        surge_score=Decimal(str(row["surge_probability"])),
+        predicted_surge=_bool(row["count_threshold_surge_classification"] if surge_method == "count_threshold" else row["predicted_surge_classification"]),
+        surge_score=Decimal(str(row["predicted_surge_score"] if surge_method == "count_threshold" else row["surge_probability"])),
+        surge_score_is_probability=surge_method == "dedicated_classifier",
     )
 
 
@@ -1248,6 +1272,7 @@ def _district_metric_rows(
     folds_by_horizon: dict[int, list[ValidationFold]],
     jobs: list[dict[str, Any]],
     predictions: list[dict[str, Any]],
+    operational_methods: dict[int, str] | None = None,
 ) -> list[dict[str, Any]]:
     names = {
         str(row["district_id"]): str(row.get("district_name") or row["district_id"])
@@ -1264,7 +1289,8 @@ def _district_metric_rows(
                 for row in predictions
                 if int(row["horizon"]) == horizon and row["district_id"] == district_id
             ]
-            records = [_prediction_record(row) for row in district_predictions]
+            method = (operational_methods or {}).get(horizon, "count_threshold")
+            records = [_prediction_record(row, surge_method=method) for row in district_predictions]
             count_metrics, surge_metrics = evaluate_predictions(records)
             excluded = 0
             for fold in folds_by_horizon[horizon]:
@@ -1284,6 +1310,7 @@ def _district_metric_rows(
                     "district_id": district_id,
                     "district_name": names.get(district_id, district_id),
                     "horizon": horizon,
+                    "surge_method": method,
                     "status": status,
                     "completed_folds": len({row["validation_fold"] for row in district_predictions}),
                     "failed_folds": failed_folds,

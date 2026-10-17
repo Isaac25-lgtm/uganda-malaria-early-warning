@@ -32,7 +32,7 @@ and a database-verified active-district count (never hardcoded).
 **Final schema closure (Stage A).** Selection evidence must carry exactly
 horizons 4/8/12 in both selected blocks and **exactly four unique approved model
 comparisons** per horizon (Baseline/Naive, SARIMAX, Random Forest, XGBoost), with
-finite winning metrics (count: WAPE or RMSE; surge: F1 and sensitivity) — winners
+finite winning metrics (count: WAPE or RMSE; surge: F2 and sensitivity) — winners
 are preserved, never recalculated. Forecast evidence must carry integer issue/target
 weeks for all three horizons, consistent row counts, and `published=true`/
 `status=success`; a null target week never returns 200. The 12-fold claim is made
@@ -93,7 +93,7 @@ as 12 only after this verification.
 ## Other corrected contracts
 
 - **model-selection** exposes explicit `metric_name`/`metric_value` — count uses
-  **WAPE** when present else **RMSE**; surge uses **F1** with **sensitivity** named
+  **WAPE** when present else **RMSE**; surge uses **F2** with **sensitivity** named
   as tie-breaker. Metrics are finite JSON numbers. Winners are read from evidence
   (`winner_recalculated: false`).
 - **threshold-method** exposes the exact **Low/Moderate/High/Very High** bands

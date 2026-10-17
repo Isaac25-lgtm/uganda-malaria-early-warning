@@ -73,7 +73,7 @@ def run_baseline_validation(
                         threshold=threshold,
                         actual_surge=actual > threshold,
                         predicted_surge=predicted > threshold,
-                        surge_score=predicted,
+                        surge_score=predicted - threshold,
                     )
                 )
         count_metrics, surge_metrics = evaluate_predictions(predictions)

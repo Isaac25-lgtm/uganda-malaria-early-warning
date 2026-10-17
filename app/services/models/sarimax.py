@@ -11,7 +11,7 @@ import time
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -57,7 +57,7 @@ NONSEASONAL_FALLBACK = ((1, 0, 0), (0, 0, 0, 0))
 REGRESSION_FALLBACK = ((0, 0, 0), (0, 0, 0, 0))
 MIN_OBSERVED_HISTORY = 52
 MIN_SEASONAL_HISTORY = 104
-CHECKPOINT_VERSION = 1
+CHECKPOINT_VERSION = 2
 
 PREDICTION_COLUMNS = (
     "district_id",
@@ -406,7 +406,7 @@ def _run_district_horizon_job(
                 "observed_cases": str(actual),
                 "predicted_cases": str(predicted),
                 "observed_surge_status": actual > threshold,
-                "predicted_surge_score": str(predicted),
+                "predicted_surge_score": str(predicted - threshold),
                 "predicted_surge_classification": predicted > threshold,
                 "surge_threshold": str(threshold),
                 "selected_sarimax_order": json.dumps(fit["order"]),
@@ -582,6 +582,26 @@ def _forecast_fold(
     }
 
 
+def _complete_weekly_history(training_rows):
+    """Preserve missing calendar slots without imputing case outcomes."""
+    if not training_rows:
+        return []
+    by_date = {date.fromisoformat(str(row["week_start_date"])): row for row in training_rows}
+    if len(by_date) != len(training_rows):
+        raise SARIMAXValidationError("Duplicate SARIMAX history week.")
+    start, end = min(by_date), max(by_date)
+    output = []
+    cursor = start
+    while cursor <= end:
+        output.append(by_date.get(cursor, {
+            "week_start_date": cursor.isoformat(),
+            "confirmed_malaria_cases": None,
+            **{name: None for name in SARIMAX_EXOGENOUS_FEATURES},
+        }))
+        cursor += timedelta(weeks=1)
+    return output
+
+
 def _fit_sarimax(
     *,
     training_rows: list[dict[str, Any]],
@@ -593,6 +613,7 @@ def _fit_sarimax(
     import numpy as np
     from statsmodels.tsa.statespace.sarimax import SARIMAX
 
+    training_rows = _complete_weekly_history(training_rows)
     observed = sum(
         row.get("confirmed_malaria_cases") not in {None, ""} for row in training_rows
     )

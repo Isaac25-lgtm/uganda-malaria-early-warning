@@ -44,6 +44,7 @@ class PredictionRecord:
     actual_surge: bool
     predicted_surge: bool
     surge_score: Decimal | None = None
+    surge_score_is_probability: bool = False
 
 
 @dataclass
@@ -176,7 +177,7 @@ def district_threshold(
         seasonal_rows = [
             row
             for row in eligible_rows
-            if _circular_week_distance(_row_epi_week(row), target_epi_week)
+            if _seasonal_week_distance(row, target_epi_week)
             <= SURGE_SEASONAL_WINDOW_WEEKS
         ]
         if len(seasonal_rows) >= SURGE_MINIMUM_SEASONAL_OBSERVATIONS:
@@ -187,7 +188,7 @@ def district_threshold(
         if (value := _decimal(row.get("confirmed_malaria_cases"))) is not None
     )
     if not values:
-        return Decimal("0")
+        raise ModelValidationError(f"No valid threshold history for district {district_id}.")
     index = int((Decimal(len(values) - 1) * quantile).to_integral_value(rounding="ROUND_FLOOR"))
     return values[index]
 
@@ -205,7 +206,7 @@ def district_threshold_proof(
     seasonal = [
         row
         for row in eligible
-        if _circular_week_distance(_row_epi_week(row), target_epi_week)
+        if _seasonal_week_distance(row, target_epi_week)
         <= SURGE_SEASONAL_WINDOW_WEEKS
     ]
     seasonal_used = len(seasonal) >= SURGE_MINIMUM_SEASONAL_OBSERVATIONS
@@ -255,6 +256,7 @@ def evaluate_predictions(records: list[PredictionRecord]) -> tuple[dict[str, Any
         [record.actual_surge for record in records],
         [record.predicted_surge for record in records],
         [record.surge_score for record in records],
+        score_is_probability=bool(records) and all(record.surge_score_is_probability for record in records),
     )
     return count_metrics, surge_metrics
 
@@ -263,6 +265,7 @@ def classification_metrics(
     actual: list[bool],
     predicted: list[bool],
     scores: list[Decimal | None] | None = None,
+    *, score_is_probability: bool = False,
 ) -> dict[str, Any]:
     counts = Counter(zip(actual, predicted))
     tp = counts[(True, True)]
@@ -277,7 +280,7 @@ def classification_metrics(
     auc = _auc(actual, scores or [])
     f2 = _ratio(5 * tp, 5 * tp + 4 * fn + fp)
     pr_auc = _pr_auc(actual, scores or [])
-    brier_score = _brier_score(actual, scores or [])
+    brier_score = _brier_score(actual, scores or []) if score_is_probability else None
     return {
         "n": len(actual),
         "tp": tp,
@@ -328,9 +331,16 @@ def _row_epi_week(row: dict[str, Any]) -> int:
     raise ModelValidationError("Threshold history row has no epidemiological week.")
 
 
-def _circular_week_distance(first: int, second: int) -> int:
+def _seasonal_week_distance(row: dict[str, Any], target_week: int) -> int:
+    year = _row_epi_year(row)
+    weeks = date(year, 12, 28).isocalendar().week if year else 53
+    # In a 52-week reference year, week 53 maps to its final seasonal bin.
+    return _circular_week_distance(min(_row_epi_week(row), weeks), min(target_week, weeks), weeks)
+
+
+def _circular_week_distance(first: int, second: int, weeks_in_year: int = 53) -> int:
     direct = abs(first - second)
-    return min(direct, 53 - direct)
+    return min(direct, weeks_in_year - direct)
 
 
 def _assert_folds_are_leakage_safe(folds: list[ValidationFold]) -> None:
@@ -417,11 +427,13 @@ def _pr_auc(actual: list[bool], scores: list[Decimal | None]) -> Decimal | None:
     false_positives = 0
     previous_recall = Decimal("0")
     area = Decimal("0")
-    for label, _ in ordered:
-        if label:
-            true_positives += 1
-        else:
-            false_positives += 1
+    # Consume a complete tied-score group before evaluating its operating point.
+    # Otherwise AP depends on the arbitrary input order of equal scores.
+    from itertools import groupby
+    for _, group in groupby(ordered, key=lambda item: item[1]):
+        labels = [label for label, _ in group]
+        true_positives += sum(labels)
+        false_positives += len(labels) - sum(labels)
         recall = Decimal(true_positives) / Decimal(positives)
         precision = Decimal(true_positives) / Decimal(true_positives + false_positives)
         area += (recall - previous_recall) * precision

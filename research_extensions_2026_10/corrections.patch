@@ -1,0 +1,558 @@
+diff --git a/.gitignore b/.gitignore
+index 61f82a5..7c67468 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -20,6 +20,11 @@ secrets*
+ # they exceed GitHub size limits. See README section "Data availability".
+ # ---------------------------------------------------------------------------
+ data/
++research_comparisons/**/runs/
++research_extensions_2026_10/baseline/
++research_extensions_2026_10/results/
++research_extensions_2026_10/experiments/
++research_extensions_2026_10/private/
+ 
+ # Large source boundary file (46 MB); the simplified web map is derived locally
+ UGANDA_DISTRICT.json
+diff --git a/README.md b/README.md
+index b05bcf6..f2f11f9 100644
+--- a/README.md
++++ b/README.md
+@@ -22,6 +22,13 @@
+ 
+ ## Overview
+ 
++The October 2026 correction and research follow-up is documented in
++[`research_extensions_2026_10/HANDOFF.md`](research_extensions_2026_10/HANDOFF.md).
++All planned numerical comparisons and final computational checks are complete.
++Original submitted results and production
++artifacts are preserved; the dashboard still shows its historical 2025W52 issue.
++See [`docs/HANDOVER.md`](docs/HANDOVER.md) for the code corrections and reproducible commands.
++
+ This system turns two routinely available data streams — weekly DHIS2 malaria surveillance
+ and satellite-derived climate data — into forward-looking district risk information for all
+ **146 districts and cities in Uganda**.
+diff --git a/app/services/case_data_cleaning.py b/app/services/case_data_cleaning.py
+index a8023f7..c705f14 100644
+--- a/app/services/case_data_cleaning.py
++++ b/app/services/case_data_cleaning.py
+@@ -64,6 +64,7 @@ class CleanCaseValue:
+     status: str
+     predictor_interpolated: bool
+     interpolation_gap_weeks: int | None = None
++    feature_available_from: date | None = None
+ 
+ 
+ @dataclass(frozen=True)
+@@ -262,6 +263,12 @@ def build_clean_case_series(
+                 source_missing += 1
+             interpolated, gap_size = _bounded_linear_interpolation(series, index)
+             use_interpolation = observed_value is None and interpolated is not None
++            feature_available_from = None
++            if use_interpolation:
++                right = index + 1
++                while series[right] is None:
++                    right += 1
++                feature_available_from = weekly_dates[right]
+             if use_interpolation:
+                 if is_excluded:
+                     interpolated_errors += 1
+@@ -284,6 +291,7 @@ def build_clean_case_series(
+                 status=status,
+                 predictor_interpolated=use_interpolation,
+                 interpolation_gap_weeks=gap_size if use_interpolation else None,
++                feature_available_from=feature_available_from,
+             )
+ 
+     registry_hash = hashlib.sha256(exclusion_path.read_bytes()).hexdigest()
+diff --git a/app/services/explainability.py b/app/services/explainability.py
+index 8cc43ab..dd784b0 100644
+--- a/app/services/explainability.py
++++ b/app/services/explainability.py
+@@ -295,13 +295,13 @@ def _validate_selection(payload: Any) -> Any:
+                  f"count winner for horizon {horizon} is not an approved model.")
+         _require(surge.get("model_name") in APPROVED_MODEL_NAMES,
+                  f"surge winner for horizon {horizon} is not an approved model.")
+-        # Winning metrics must be finite: count needs WAPE or RMSE; surge needs F1 and sensitivity.
++        # Winning metrics must be finite: count needs WAPE or RMSE; surge needs F2 and sensitivity.
+         cm = count.get("count_metrics")
+         _require(_finite_present(cm, "wape") or _finite_present(cm, "rmse"),
+                  f"count winner for horizon {horizon} has no finite WAPE or RMSE.")
+         sm = surge.get("surge_metrics")
+-        _require(_finite_present(sm, "f1") and _finite_present(sm, "sensitivity"),
+-                 f"surge winner for horizon {horizon} has no finite F1 and sensitivity.")
++        _require(_finite_present(sm, "f2") and _finite_present(sm, "sensitivity"),
++                 f"surge winner for horizon {horizon} has no finite F2 and sensitivity.")
+ 
+         # Exactly four unique approved model comparisons for this horizon.
+         compared = [m for m in root["all_models_compared"]
+@@ -1027,8 +1027,8 @@ def build_model_selection(horizon: int) -> dict[str, Any]:
+         },
+         "surge_selection": {
+             "model_name": surge.get("model_name"),
+-            "metric_name": "F1",
+-            "metric_value": surge_metrics.get("f1"),
++            "metric_name": "F2",
++            "metric_value": surge_metrics.get("f2"),
+             "tie_breaker_name": "sensitivity",
+             "tie_breaker_value": surge_metrics.get("sensitivity"),
+             "metric_rule": surge.get("metric_rule") or rationale.get("surge"),
+diff --git a/app/services/model_validation.py b/app/services/model_validation.py
+index 613227b..654ac05 100644
+--- a/app/services/model_validation.py
++++ b/app/services/model_validation.py
+@@ -44,6 +44,7 @@ class PredictionRecord:
+     actual_surge: bool
+     predicted_surge: bool
+     surge_score: Decimal | None = None
++    surge_score_is_probability: bool = False
+ 
+ 
+ @dataclass
+@@ -176,7 +177,7 @@ def district_threshold(
+         seasonal_rows = [
+             row
+             for row in eligible_rows
+-            if _circular_week_distance(_row_epi_week(row), target_epi_week)
++            if _seasonal_week_distance(row, target_epi_week)
+             <= SURGE_SEASONAL_WINDOW_WEEKS
+         ]
+         if len(seasonal_rows) >= SURGE_MINIMUM_SEASONAL_OBSERVATIONS:
+@@ -187,7 +188,7 @@ def district_threshold(
+         if (value := _decimal(row.get("confirmed_malaria_cases"))) is not None
+     )
+     if not values:
+-        return Decimal("0")
++        raise ModelValidationError(f"No valid threshold history for district {district_id}.")
+     index = int((Decimal(len(values) - 1) * quantile).to_integral_value(rounding="ROUND_FLOOR"))
+     return values[index]
+ 
+@@ -205,7 +206,7 @@ def district_threshold_proof(
+     seasonal = [
+         row
+         for row in eligible
+-        if _circular_week_distance(_row_epi_week(row), target_epi_week)
++        if _seasonal_week_distance(row, target_epi_week)
+         <= SURGE_SEASONAL_WINDOW_WEEKS
+     ]
+     seasonal_used = len(seasonal) >= SURGE_MINIMUM_SEASONAL_OBSERVATIONS
+@@ -255,6 +256,7 @@ def evaluate_predictions(records: list[PredictionRecord]) -> tuple[dict[str, Any
+         [record.actual_surge for record in records],
+         [record.predicted_surge for record in records],
+         [record.surge_score for record in records],
++        score_is_probability=bool(records) and all(record.surge_score_is_probability for record in records),
+     )
+     return count_metrics, surge_metrics
+ 
+@@ -263,6 +265,7 @@ def classification_metrics(
+     actual: list[bool],
+     predicted: list[bool],
+     scores: list[Decimal | None] | None = None,
++    *, score_is_probability: bool = False,
+ ) -> dict[str, Any]:
+     counts = Counter(zip(actual, predicted))
+     tp = counts[(True, True)]
+@@ -277,7 +280,7 @@ def classification_metrics(
+     auc = _auc(actual, scores or [])
+     f2 = _ratio(5 * tp, 5 * tp + 4 * fn + fp)
+     pr_auc = _pr_auc(actual, scores or [])
+-    brier_score = _brier_score(actual, scores or [])
++    brier_score = _brier_score(actual, scores or []) if score_is_probability else None
+     return {
+         "n": len(actual),
+         "tp": tp,
+@@ -328,9 +331,16 @@ def _row_epi_week(row: dict[str, Any]) -> int:
+     raise ModelValidationError("Threshold history row has no epidemiological week.")
+ 
+ 
+-def _circular_week_distance(first: int, second: int) -> int:
++def _seasonal_week_distance(row: dict[str, Any], target_week: int) -> int:
++    year = _row_epi_year(row)
++    weeks = date(year, 12, 28).isocalendar().week if year else 53
++    # In a 52-week reference year, week 53 maps to its final seasonal bin.
++    return _circular_week_distance(min(_row_epi_week(row), weeks), min(target_week, weeks), weeks)
++
++
++def _circular_week_distance(first: int, second: int, weeks_in_year: int = 53) -> int:
+     direct = abs(first - second)
+-    return min(direct, 53 - direct)
++    return min(direct, weeks_in_year - direct)
+ 
+ 
+ def _assert_folds_are_leakage_safe(folds: list[ValidationFold]) -> None:
+@@ -417,11 +427,13 @@ def _pr_auc(actual: list[bool], scores: list[Decimal | None]) -> Decimal | None:
+     false_positives = 0
+     previous_recall = Decimal("0")
+     area = Decimal("0")
+-    for label, _ in ordered:
+-        if label:
+-            true_positives += 1
+-        else:
+-            false_positives += 1
++    # Consume a complete tied-score group before evaluating its operating point.
++    # Otherwise AP depends on the arbitrary input order of equal scores.
++    from itertools import groupby
++    for _, group in groupby(ordered, key=lambda item: item[1]):
++        labels = [label for label, _ in group]
++        true_positives += sum(labels)
++        false_positives += len(labels) - sum(labels)
+         recall = Decimal(true_positives) / Decimal(positives)
+         precision = Decimal(true_positives) / Decimal(true_positives + false_positives)
+         area += (recall - previous_recall) * precision
+diff --git a/app/services/modelling_dataset.py b/app/services/modelling_dataset.py
+index d6f4e69..fe7660c 100644
+--- a/app/services/modelling_dataset.py
++++ b/app/services/modelling_dataset.py
+@@ -317,16 +317,17 @@ def assemble_dataset_rows(
+             lag_value = clean_values.get(
+                 (district_id, origin_date - timedelta(weeks=lag))
+             )
+-            out[f"cases_lag_{lag}"] = _clean_feature_value(lag_value)
++            feature_value = _clean_feature_value(lag_value, as_of=origin_date)
++            out[f"cases_lag_{lag}"] = feature_value
+             out[f"cases_lag_{lag}_interpolated"] = int(bool(
+-                lag_value and lag_value.predictor_interpolated
++                lag_value and lag_value.predictor_interpolated and feature_value is not None
+             ))
+         for window in ROLLING_WINDOWS:
+             previous_values = [
+                 clean_values.get((district_id, origin_date - timedelta(weeks=offset)))
+                 for offset in range(1, window + 1)
+             ]
+-            feature_values = [_clean_feature_value(item) for item in previous_values]
++            feature_values = [_clean_feature_value(item, as_of=origin_date) for item in previous_values]
+             out[f"cases_rolling_mean_{window}"] = _mean_with_minimum(
+                 feature_values,
+                 minimum=MIN_ROLLING_OBSERVATIONS[window],
+@@ -339,7 +340,8 @@ def assemble_dataset_rows(
+                 and not item.predictor_interpolated
+             )
+             out[f"cases_rolling_interpolated_count_{window}"] = sum(
+-                1 for item in previous_values if item and item.predictor_interpolated
++                1 for item, value in zip(previous_values, feature_values)
++                if item and item.predictor_interpolated and value is not None
+             )
+         for horizon in HORIZONS:
+             target_date = origin_date + timedelta(weeks=horizon)
+@@ -579,9 +581,13 @@ def _source_case_values(
+     return values
+ 
+ 
+-def _clean_feature_value(value: CleanCaseValue | None) -> Decimal | None:
++def _clean_feature_value(value: CleanCaseValue | None, *, as_of: date) -> Decimal | None:
+     if value is None or value.cases_for_features is None:
+         return None
++    if value.predictor_interpolated and (
++        value.feature_available_from is None or value.feature_available_from > as_of
++    ):
++        return None
+     return value.cases_for_features
+ 
+ 
+diff --git a/app/services/models/baseline.py b/app/services/models/baseline.py
+index af26af8..d984247 100644
+--- a/app/services/models/baseline.py
++++ b/app/services/models/baseline.py
+@@ -73,7 +73,7 @@ def run_baseline_validation(
+                         threshold=threshold,
+                         actual_surge=actual > threshold,
+                         predicted_surge=predicted > threshold,
+-                        surge_score=predicted,
++                        surge_score=predicted - threshold,
+                     )
+                 )
+         count_metrics, surge_metrics = evaluate_predictions(predictions)
+diff --git a/app/services/models/pooled_tree_validation.py b/app/services/models/pooled_tree_validation.py
+index 53b4321..6b3d6e0 100644
+--- a/app/services/models/pooled_tree_validation.py
++++ b/app/services/models/pooled_tree_validation.py
+@@ -33,7 +33,7 @@ from app.services.model_validation import (
+ from app.services.modelling_dataset import DATASET_PATH, HORIZONS, read_modelling_dataset
+ 
+ RANDOM_STATE = 24024
+-CHECKPOINT_VERSION = 2
++CHECKPOINT_VERSION = 3
+ 
+ POOLED_CATEGORICAL_FEATURES = ("district_id",)
+ POOLED_NUMERIC_FEATURES = (
+@@ -97,6 +97,7 @@ DISTRICT_METRIC_COLUMNS = (
+     "district_id",
+     "district_name",
+     "horizon",
++    "surge_method",
+     "status",
+     "completed_folds",
+     "failed_folds",
+@@ -433,6 +434,7 @@ def run_pooled_tree_validation(
+             folds_by_horizon=folds_by_horizon,
+             jobs=jobs,
+             predictions=predictions,
++            operational_methods=summary.operational_surge_method_by_horizon,
+         )
+         summary.row_counts["training_missing_target_exclusions"] = sum(
+             int(job.get("training_missing_target_exclusions", 0)) for job in jobs
+@@ -486,6 +488,21 @@ def run_pooled_tree_validation(
+         raise
+ 
+ 
++def _chronological_inner_split(rows, *, horizon, holdout_dates):
++    """One inner fit may see labels only through the earliest held-out origin.
++
++    Splitting on target dates alone admits labels h-1 weeks after that origin.
++    The same embargo is used for regression and classifier tuning.
++    """
++    target = f"target_week_start_date_h{horizon}"
++    validation = [r for r in rows if str(r[target]) in holdout_dates]
++    if not validation:
++        return [], []
++    cutoff = min(str(r["week_start_date"]) for r in validation)
++    training = [r for r in rows if str(r[target]) not in holdout_dates and str(r[target]) <= cutoff]
++    return training, validation
++
++
+ def _select_horizon_parameters(
+     config: PooledTreeConfig, folds: list[ValidationFold]
+ ) -> dict[str, Any]:
+@@ -511,8 +528,9 @@ def _select_horizon_parameters(
+             "available_target_weeks": len(unique_dates),
+         }
+     holdout_dates = set(unique_dates[-holdout_weeks:])
+-    inner_train = [row for row in rows if str(row[target_date_column]) not in holdout_dates]
+-    inner_validation = [row for row in rows if str(row[target_date_column]) in holdout_dates]
++    inner_train, inner_validation = _chronological_inner_split(
++        rows, horizon=folds[0].horizon, holdout_dates=holdout_dates
++    )
+     if not inner_train or not inner_validation:
+         return {
+             "status": "default_empty_inner_split",
+@@ -588,15 +606,18 @@ def _select_horizon_classifier(
+     if len(unique_dates) <= holdout_weeks + 8:
+         return {**fallback, "available_target_weeks": len(unique_dates)}
+     holdout_dates = set(unique_dates[-holdout_weeks:])
+-    inner_train = [row for row in rows if str(row[target_date_column]) not in holdout_dates]
+-    inner_validation = [row for row in rows if str(row[target_date_column]) in holdout_dates]
++    inner_train, inner_validation = _chronological_inner_split(
++        rows, horizon=fold.horizon, holdout_dates=holdout_dates
++    )
+     if not inner_train or not inner_validation:
+         return {**fallback, "status": "default_empty_inner_split"}
+ 
+     train_x = _feature_frame(inner_train)
+     validation_x = _feature_frame(inner_validation)
+-    train_y = _surge_target_array(inner_train, inner_train, fold.horizon)
+-    validation_y = _surge_target_array(inner_train, inner_validation, fold.horizon)
++    inner_cutoff = min(str(row["week_start_date"]) for row in inner_validation)
++    reference = [row for row in fold.train_rows if str(row["week_start_date"]) <= inner_cutoff]
++    train_y = _surge_target_array(reference, inner_train, fold.horizon)
++    validation_y = _surge_target_array(reference, inner_validation, fold.horizon)
+     if len(set(bool(value) for value in train_y)) < 2:
+         return {
+             **fallback,
+@@ -618,6 +639,7 @@ def _select_horizon_classifier(
+                     [bool(value) for value in validation_y],
+                     [float(value) >= cutoff for value in probabilities],
+                     [Decimal(str(value)) for value in probabilities],
++                    score_is_probability=True,
+                 )
+                 results.append(
+                     {
+@@ -1166,6 +1188,7 @@ def _populate_summary_metrics(
+             summary.threshold_proof.append(
+                 {
+                     "horizon": horizon,
++                    "surge_method": operational_method,
+                     "district_id": first.district_id,
+                     "origin_date": first.origin_date.isoformat(),
+                     "target_date": first.target_date.isoformat(),
+@@ -1225,7 +1248,7 @@ def _metric_float(
+         return default
+ 
+ 
+-def _prediction_record(row: dict[str, Any]) -> PredictionRecord:
++def _prediction_record(row: dict[str, Any], *, surge_method="dedicated_classifier") -> PredictionRecord:
+     return PredictionRecord(
+         district_id=str(row["district_id"]),
+         horizon=int(row["horizon"]),
+@@ -1235,8 +1258,9 @@ def _prediction_record(row: dict[str, Any]) -> PredictionRecord:
+         predicted=Decimal(str(row["predicted_cases"])),
+         threshold=Decimal(str(row["district_surge_threshold"])),
+         actual_surge=_bool(row["observed_surge_status"]),
+-        predicted_surge=_bool(row["predicted_surge_classification"]),
+-        surge_score=Decimal(str(row["surge_probability"])),
++        predicted_surge=_bool(row["count_threshold_surge_classification"] if surge_method == "count_threshold" else row["predicted_surge_classification"]),
++        surge_score=Decimal(str(row["predicted_surge_score"] if surge_method == "count_threshold" else row["surge_probability"])),
++        surge_score_is_probability=surge_method == "dedicated_classifier",
+     )
+ 
+ 
+@@ -1248,6 +1272,7 @@ def _district_metric_rows(
+     folds_by_horizon: dict[int, list[ValidationFold]],
+     jobs: list[dict[str, Any]],
+     predictions: list[dict[str, Any]],
++    operational_methods: dict[int, str] | None = None,
+ ) -> list[dict[str, Any]]:
+     names = {
+         str(row["district_id"]): str(row.get("district_name") or row["district_id"])
+@@ -1264,7 +1289,8 @@ def _district_metric_rows(
+                 for row in predictions
+                 if int(row["horizon"]) == horizon and row["district_id"] == district_id
+             ]
+-            records = [_prediction_record(row) for row in district_predictions]
++            method = (operational_methods or {}).get(horizon, "count_threshold")
++            records = [_prediction_record(row, surge_method=method) for row in district_predictions]
+             count_metrics, surge_metrics = evaluate_predictions(records)
+             excluded = 0
+             for fold in folds_by_horizon[horizon]:
+@@ -1284,6 +1310,7 @@ def _district_metric_rows(
+                     "district_id": district_id,
+                     "district_name": names.get(district_id, district_id),
+                     "horizon": horizon,
++                    "surge_method": method,
+                     "status": status,
+                     "completed_folds": len({row["validation_fold"] for row in district_predictions}),
+                     "failed_folds": failed_folds,
+diff --git a/app/services/models/sarimax.py b/app/services/models/sarimax.py
+index 706ac30..c07abe6 100644
+--- a/app/services/models/sarimax.py
++++ b/app/services/models/sarimax.py
+@@ -11,7 +11,7 @@ import time
+ import warnings
+ from contextlib import contextmanager
+ from dataclasses import dataclass, field
+-from datetime import date, datetime, timezone
++from datetime import date, datetime, timedelta, timezone
+ from decimal import Decimal
+ from pathlib import Path
+ from typing import Any, Callable, Iterator
+@@ -57,7 +57,7 @@ NONSEASONAL_FALLBACK = ((1, 0, 0), (0, 0, 0, 0))
+ REGRESSION_FALLBACK = ((0, 0, 0), (0, 0, 0, 0))
+ MIN_OBSERVED_HISTORY = 52
+ MIN_SEASONAL_HISTORY = 104
+-CHECKPOINT_VERSION = 1
++CHECKPOINT_VERSION = 2
+ 
+ PREDICTION_COLUMNS = (
+     "district_id",
+@@ -406,7 +406,7 @@ def _run_district_horizon_job(
+                 "observed_cases": str(actual),
+                 "predicted_cases": str(predicted),
+                 "observed_surge_status": actual > threshold,
+-                "predicted_surge_score": str(predicted),
++                "predicted_surge_score": str(predicted - threshold),
+                 "predicted_surge_classification": predicted > threshold,
+                 "surge_threshold": str(threshold),
+                 "selected_sarimax_order": json.dumps(fit["order"]),
+@@ -582,6 +582,26 @@ def _forecast_fold(
+     }
+ 
+ 
++def _complete_weekly_history(training_rows):
++    """Preserve missing calendar slots without imputing case outcomes."""
++    if not training_rows:
++        return []
++    by_date = {date.fromisoformat(str(row["week_start_date"])): row for row in training_rows}
++    if len(by_date) != len(training_rows):
++        raise SARIMAXValidationError("Duplicate SARIMAX history week.")
++    start, end = min(by_date), max(by_date)
++    output = []
++    cursor = start
++    while cursor <= end:
++        output.append(by_date.get(cursor, {
++            "week_start_date": cursor.isoformat(),
++            "confirmed_malaria_cases": None,
++            **{name: None for name in SARIMAX_EXOGENOUS_FEATURES},
++        }))
++        cursor += timedelta(weeks=1)
++    return output
++
++
+ def _fit_sarimax(
+     *,
+     training_rows: list[dict[str, Any]],
+@@ -593,6 +613,7 @@ def _fit_sarimax(
+     import numpy as np
+     from statsmodels.tsa.statespace.sarimax import SARIMAX
+ 
++    training_rows = _complete_weekly_history(training_rows)
+     observed = sum(
+         row.get("confirmed_malaria_cases") not in {None, ""} for row in training_rows
+     )
+diff --git a/app/services/report_data_service.py b/app/services/report_data_service.py
+index 3ea2460..243e1e0 100644
+--- a/app/services/report_data_service.py
++++ b/app/services/report_data_service.py
+@@ -499,7 +499,7 @@ def _methods(req: ReportRequest) -> dict[str, Any]:
+          "The district threshold is the training-only 75th percentile in the target epidemiological week +/-2 weeks. "
+          "The confirmed epidemic year 2022 remains in count-model training but is excluded from the normal-reference threshold."),
+         ("Surge classification",
+-         "Random Forest and XGBoost use a separate class-balanced probability classifier, with its cutoff selected inside chronological training data. The count-threshold rule is retained as a benchmark."),
++         "The published operational selection compares forecast counts with district seasonal thresholds. Separate class-balanced classifiers were evaluated but were not retained for the published issue; classifier probabilities must not be presented as operational warning probabilities."),
+         ("Forecast publication",
+          "Forecasts are published for a single production issue week and predict the target week only."),
+         ("Main limitations", " ".join(CORE_LIMITATIONS)),
+diff --git a/app/services/risk_classification.py b/app/services/risk_classification.py
+index 3542e40..f450fec 100644
+--- a/app/services/risk_classification.py
++++ b/app/services/risk_classification.py
+@@ -40,6 +40,13 @@ def classify_forecast_risk(
+     probability = _decimal(surge_probability)
+     cases = _decimal(predicted_cases)
+     threshold = _decimal(threshold_used)
++    if probability is None and threshold is not None and threshold <= 0:
++        return RiskClassification(
++            NO_DATA_RISK,
++            "A positive district threshold is required for count-relative risk.",
++            "unavailable",
++            no_data=True,
++        )
+     if predicted_surge_flag is None and probability is None and cases is None:
+         return RiskClassification(
+             risk_level=NO_DATA_RISK,
+diff --git a/app/templates/dashboard/index.html b/app/templates/dashboard/index.html
+index 46d1a8f..39ec524 100644
+--- a/app/templates/dashboard/index.html
++++ b/app/templates/dashboard/index.html
+@@ -15,7 +15,7 @@
+       <select class="filter-select" id="filter-issue" {% if filters.issues|length <= 1 %}disabled{% endif %}>
+         {% for issue in filters.issues %}
+         <option value="{{ issue.issue_year }}-{{ issue.issue_week }}" {% if loop.first %}selected{% endif %}>
+-          {{ issue.issue_label }}{% if issue.issue_week_start_date %} &middot; issued {{ issue.issue_week_start_date }}{% endif %}
++          {{ issue.issue_label }}{% if issue.issue_week_start_date %} &middot; origin {{ issue.issue_week_start_date }}{% endif %}
+         </option>
+         {% else %}
+         <option value="">No production issue available</option>
+diff --git a/app/templates/lifecycle/model_evaluation.html b/app/templates/lifecycle/model_evaluation.html
+index e94033b..6c3f28b 100644
+--- a/app/templates/lifecycle/model_evaluation.html
++++ b/app/templates/lifecycle/model_evaluation.html
+@@ -51,7 +51,7 @@
+         <h3 class="panel-subhead">The four approved models</h3>
+         <ul class="note-list">
+           <li><strong>Baseline/Naive</strong> — a simple reference forecast. Its role is a benchmark: other models must beat it. Strength: transparent and robust. Limitation: ignores climate and cross-district signal.</li>
+-          <li><strong>SARIMAX</strong> — a district-specific seasonal time-series model with climate regressors. Strength: captures per-district seasonality. Limitation: district-specific fitting is sensitive to short or gappy district histories.</li>
++          <li><strong>SARIMAX</strong> — a district-specific time-series procedure with climate regressors. The saved evaluation used nonseasonal ARIMAX and regression fallback fits: the annual seasonal candidate lacked sufficient history at the first selection fold. Review fallback and prediction coverage when comparing it with other models.</li>
+           <li><strong>Random Forest</strong> — a national-pooled tree ensemble. Role: the model selected for both count prediction and operational surge warning at all three horizons. Strength: captures non-linear interactions. Limitation: pooled importance may not describe every district.</li>
+           <li><strong>XGBoost</strong> — a national-pooled gradient-boosted ensemble, evaluated as a count candidate but not selected in this dataset. Strength: regularised non-linear modelling. Limitation: importance is model-specific and not causal.</li>
+         </ul>
+diff --git a/docs/explainability_api.md b/docs/explainability_api.md
+index 06137c0..98a85c1 100644
+--- a/docs/explainability_api.md
++++ b/docs/explainability_api.md
+@@ -32,7 +32,7 @@ and a database-verified active-district count (never hardcoded).
+ **Final schema closure (Stage A).** Selection evidence must carry exactly
+ horizons 4/8/12 in both selected blocks and **exactly four unique approved model
+ comparisons** per horizon (Baseline/Naive, SARIMAX, Random Forest, XGBoost), with
+-finite winning metrics (count: WAPE or RMSE; surge: F1 and sensitivity) — winners
++finite winning metrics (count: WAPE or RMSE; surge: F2 and sensitivity) — winners
+ are preserved, never recalculated. Forecast evidence must carry integer issue/target
+ weeks for all three horizons, consistent row counts, and `published=true`/
+ `status=success`; a null target week never returns 200. The 12-fold claim is made
+@@ -93,7 +93,7 @@ as 12 only after this verification.
+ ## Other corrected contracts
+ 
+ - **model-selection** exposes explicit `metric_name`/`metric_value` — count uses
+-  **WAPE** when present else **RMSE**; surge uses **F1** with **sensitivity** named
++  **WAPE** when present else **RMSE**; surge uses **F2** with **sensitivity** named
+   as tie-breaker. Metrics are finite JSON numbers. Winners are read from evidence
+   (`winner_recalculated: false`).
+ - **threshold-method** exposes the exact **Low/Moderate/High/Very High** bands

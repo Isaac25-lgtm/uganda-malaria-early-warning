@@ -20,6 +20,11 @@ secrets*
 # they exceed GitHub size limits. See README section "Data availability".
 # ---------------------------------------------------------------------------
 data/
+research_comparisons/**/runs/
+research_extensions_2026_10/baseline/
+research_extensions_2026_10/results/
+research_extensions_2026_10/experiments/
+research_extensions_2026_10/private/
 
 # Large source boundary file (46 MB); the simplified web map is derived locally
 UGANDA_DISTRICT.json
