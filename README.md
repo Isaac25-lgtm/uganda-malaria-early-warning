@@ -1,18 +1,18 @@
 <h1 align="center">Uganda Malaria Early Warning System</h1>
 
 <p align="center">
-  <strong>District-Level Malaria Surge Prediction and Early Warning Using Climate Data in Uganda</strong>
+  <strong>Climate-Driven Machine Learning Prediction for District-Level Malaria Surges in Uganda</strong>
 </p>
 
 <p align="center">
-  <em>An MSc research proof-of-concept integrating routine HMIS surveillance, satellite-derived<br>
-  climate predictors and validated machine-learning models into an auditable early-warning dashboard.</em>
+  <em>An MSc research proof-of-concept that integrates routine HMIS surveillance and satellite-derived<br>
+  climate predictors into an auditable district early-warning workflow and research dashboard.</em>
 </p>
 
 <p align="center">
   <img alt="Districts" src="https://img.shields.io/badge/districts-146-0e4d4d">
   <img alt="Horizons" src="https://img.shields.io/badge/horizons-4%20%7C%208%20%7C%2012%20weeks-176a63">
-  <img alt="Models" src="https://img.shields.io/badge/approved%20models-4-0d9488">
+  <img alt="Models" src="https://img.shields.io/badge/core%20models-4-0d9488">
   <img alt="Tests" src="https://img.shields.io/badge/tests-automated-16a34a">
   <img alt="Python" src="https://img.shields.io/badge/python-3.12-3776ab">
   <img alt="Status" src="https://img.shields.io/badge/status-research%20prototype-ea580c">
@@ -22,29 +22,32 @@
 
 ## Overview
 
-This system turns two routinely available data streams — weekly DHIS2 malaria surveillance
-and satellite-derived climate data — into forward-looking district risk information for all
-**146 districts and cities in Uganda**.
+This repository turns weekly DHIS2 malaria surveillance and satellite-derived climate data into
+forward-looking district surge warnings for all **146 districts and cities in Uganda**. For each
+district it produces a confirmed-case forecast at 4, 8 and 12 weeks ahead, compares that forecast
+with a district- and season-specific threshold, and presents the resulting warning, its evidence and
+its limitations in a read-only research dashboard.
 
-For every district it produces:
+**Correction notice (October 2026).** After the dissertation was submitted, a methodological review
+found and corrected several validation and reporting errors (see [Corrections](#corrections-october-2026)).
+The results below are the corrected values. Some differ from the submitted dissertation, and
+several earlier headline claims no longer hold. The submitted figures are kept only as provenance.
 
-- **Case forecasts** at 4, 8 and 12 weeks ahead, from a Random Forest model validated on six
-  years of national data;
-- **A surge warning** against a district- and season-specific epidemic threshold, so a "high"
-  week in Kampala is judged by Kampala's own seasonal baseline;
-- **A risk classification** rendered on a national choropleth map and a searchable district table;
-- **The evidence behind each number** — validation metrics, feature importance, data-quality
-  coverage and threshold logic are all exposed in the interface rather than hidden in the model.
+**What the corrected evidence supports**
 
-At the four-week horizon the model detects **73% of surge weeks** and cuts forecast error by
-**30% relative to the naive benchmark** that current practice most closely resembles. Uganda's
-districts presently build endemic channels manually in Excel, with no climate input and no
-forecast; this system automates that baseline and extends it three months ahead.
+- On the same historical folds, Random Forest has lower count error than a same-week-last-year
+  seasonal baseline at every horizon. It also has lower error than simple recent-average forecasts
+  when every method is given the same case information.
+- The surge warning detects about 71–73% of threshold-defined surges, but roughly half of its alerts
+  are false, and its F2 score is close to (and on these folds below) that of a policy that alerts
+  every district every week. Warning performance must therefore be judged on recall, precision and
+  false-alert workload together, not on F2 alone.
+- Lagged climate predictors give small, consistently favourable point estimates, but their
+  incremental value is not statistically established in the prespecified analysis.
+- Direct surge classifiers did not provide a credible improvement over the count-based warning.
 
-The analytical workflow is auditable in source and protected by automated tests and a
-deterministic SHA-256 integrity fingerprint over the published forecasts. Complete result
-reproduction additionally requires the governed surveillance data and production artifacts,
-which cannot be redistributed in this public repository.
+All evaluation is retrospective. This is a decision-support research prototype, not an operational
+outbreak-detection system.
 
 ---
 
@@ -55,6 +58,7 @@ which cannot be redistributed in this public repository.
 - [3. Data sources](#3-data-sources)
 - [4. Methodology](#4-methodology)
 - [5. Results](#5-results)
+- [Corrections, October 2026](#corrections-october-2026)
 - [6. System architecture](#6-system-architecture)
 - [7. Application features](#7-application-features)
 - [8. Installation](#8-installation)
@@ -69,54 +73,41 @@ which cannot be redistributed in this public repository.
 
 ## 1. Research context
 
-Malaria remains a leading cause of morbidity and mortality in Uganda, where transmission is
-spatially heterogeneous and seasonally driven. Routine surveillance through the District
-Health Information Software 2 (DHIS2) platform captures weekly confirmed cases, while
-satellite-derived climate products characterise the environmental conditions that precede
-changes in transmission.
-
-This study investigates whether routinely available surveillance and climate data can
-support **district-level, multi-horizon malaria surge early warning** across all 146 Ugandan
-districts and cities. The research question is deliberately operational: not whether climate
-*causes* malaria, but whether climate-informed models can provide sufficiently timely and
-balanced warnings to support district-level review.
+Malaria remains a leading cause of morbidity in Uganda, with spatially heterogeneous and seasonal
+transmission. District teams currently compare reported cases with historical endemic channels,
+largely by hand, which detects a surge only after it has been reported. This study asks whether
+routine DHIS2 surveillance, combined with gridded climate data, can support **district-level,
+multi-horizon surge early warning** across all 146 districts and cities. The question is operational
+and predictive, not causal.
 
 **Study scope**
 
 | Dimension | Specification |
 | --- | --- |
 | Spatial unit | 146 districts and cities (canonical `district_id`) |
-| Temporal unit | Epidemiological week (ISO-8601, Monday start), 2020–2025 |
+| Temporal unit | ISO-8601 epidemiological week (Monday start), 2020–2025 |
 | Forecast horizons | 4, 8 and 12 weeks ahead |
-| Primary outcome | Weekly confirmed malaria cases (HMIS 033b) |
-| Secondary outcome | District surge classification against a seasonal threshold |
+| Primary objective | District surge warning against a seasonal Q75 threshold |
+| Supporting objective | Weekly confirmed malaria case-count forecasting (HMIS 033b) |
 
 ---
 
 ## 2. Contribution
 
-This work contributes:
-
-1. **Multi-horizon district forecasting at national coverage** — weekly forecasts for all
-   146 districts at three horizons, rather than a single aggregate or sentinel-site model.
-2. **Joint count and surge evaluation** — models are assessed simultaneously on continuous
-   error (MAE, RMSE, MAPE, WAPE, R²) and on surge detection (sensitivity, specificity,
-   precision, F1, F2, PR-AUC, Brier score).
-3. **District–season-specific thresholds** — surge reference values are computed per district
-   for the target epidemiological week ±2 weeks, rather than a single national cut-off.
-4. **Defensible treatment of a true epidemic** — the 2022 national epidemic is retained in
-   count-model training but excluded from the normal-reference threshold, so a real epidemic
-   does not silently redefine "normal".
-5. **Auditable handling of confirmed reporting errors** — six district-biostatistician-confirmed
-   data-entry errors are recorded in a hash-verified exclusion registry; raw values remain
-   unchanged and fully auditable.
-6. **Leakage-resistant temporal validation** — chronological rolling-origin validation with 12
-   evenly spaced folds across multiple years, with preprocessing fitted on training rows only.
-7. **An empirical operational finding** — dedicated class-balanced classifiers produced
-   excessive false alerts on this dataset; a count-versus-seasonal-threshold rule proved more
-   operationally balanced. All classifier results are retained rather than discarded.
-8. **An end-to-end auditable system** — surveillance quality, climate integration,
-   explainability, governance, reporting and a district dashboard in one auditable application.
+1. **National district-level, multi-horizon workflow** — weekly forecasts and surge warnings for all
+   146 districts at three horizons, on the routine DHIS2 platform.
+2. **District- and season-specific thresholds** — training-only Q75 references for the target week
+   ±2 weeks, with the 2022 epidemic excluded from the normal reference but retained for training.
+3. **Leakage-controlled chronological validation** — rolling-origin evaluation with training-only
+   preprocessing, horizon-aware label eligibility and, after correction, an embargo on inner tuning.
+4. **Transparent warning evaluation** — recall, precision, false alerts, missed surges and alert rate
+   are reported alongside F2, together with an always-alert reference that exposes what F2 alone rewards.
+5. **Same-data benchmarking** — adapted published methods re-evaluated on this study's own panel
+   under identical folds and warning rule, with adaptation fidelity recorded.
+6. **Auditable handling of reporting errors** — six district-confirmed errors are held in a
+   hash-verified exclusion register; raw values stay unchanged.
+7. **An end-to-end auditable prototype** — data quality, climate integration, model evaluation,
+   explainability, governance and reporting in one application.
 
 ---
 
@@ -124,17 +115,14 @@ This work contributes:
 
 | Source | Variable | Unit / resolution |
 | --- | --- | --- |
-| **DHIS2 HMIS 033b** | Confirmed malaria cases (approved HMIS 033b data element) | District-week counts |
-| **DHIS2 HMIS 033b** | Facility reporting completeness | Percentage of expected reports |
-| **CHIRPS** | Rainfall | Millimetres, weekly total, district polygon mean |
-| **ERA5-Land** | Temperature | Degrees Celsius, weekly mean |
-| **ERA5-Land** | Relative humidity | Percent, derived from temperature and dewpoint |
+| **DHIS2 HMIS 033b** | Confirmed malaria cases | District-week counts |
+| **DHIS2 HMIS 033b** | Facility reporting completeness | Percentage of expected reports (descriptive only) |
+| **CHIRPS** | Rainfall | mm, weekly total of daily district polygon means |
+| **ERA5-Land** | Temperature | °C, weekly mean |
+| **ERA5-Land** | Relative humidity | %, derived per cell-hour from temperature and dewpoint |
 | **UBOS** | District boundaries | Administrative polygons |
 
-Climate rasters are aggregated to district polygons and aligned to epidemiological weeks.
-Wind speed is **not** used, and no negative binomial specification is included; both
-exclusions are verified programmatically against the production manifest at runtime rather
-than merely asserted in documentation.
+Wind speed and population denominators are not model inputs.
 
 ---
 
@@ -142,100 +130,139 @@ than merely asserted in documentation.
 
 ### 4.1 Surveillance data preparation
 
-Raw DHIS2 values and database records are **preserved unchanged**. Analytical treatment is
-applied downstream and documented:
+- Missing reports remain missing and are never zero-filled; explicit zeros stay zero.
+- Six confirmed reporting errors are excluded as outcomes, validation truth and threshold history.
+- Outcomes are never imputed. Bounded linear interpolation (gaps of at most two weeks) is used only
+  to build predictor histories, and only when its right-hand anchor was observed by the forecast origin.
 
-- **Missing reports remain missing.** Absent district-weeks are never zero-filled; an
-  explicitly reported zero remains zero. The two are distinguished throughout.
-- **Confirmed reporting errors** (six district-weeks, verified with district biostatisticians)
-  are recorded in a SHA-256-verified exclusion registry and treated as missing for outcomes,
-  validation truth and threshold history.
-- **Outcomes are never imputed.**
-- **Bounded linear interpolation** is used *only* to construct predictor histories across one-
-  or two-week internal gaps. Leading, trailing and longer gaps remain missing, and
-  interpolation indicators are retained as predictors.
+Coverage: 45,698 expected district-weeks, 45,451 received, 247 absent at source, 6 confirmed errors,
+45,445 valid outcomes.
 
-Coverage evidence: 45,698 expected district-weeks, 45,451 received, 247 absent at source,
-6 confirmed errors, 253 analytical missing outcomes.
+### 4.2 Predictors
 
-### 4.2 Modelling dataset
+28 raw predictors: district identity, two time terms, case lags (1, 2, 4, 8, 12 weeks), rolling
+case means (4, 8, 12 weeks), interpolation indicators, and rainfall, temperature and humidity lagged
+4, 8 and 12 weeks **before the forecast origin**. District identity is one-hot encoded on training
+rows only (unseen categories are ignored).
 
-45,451 district-week rows across 146 districts with 34 predictor columns, comprising malaria
-case lags and rolling means, lagged climate variables (4, 8 and 12 weeks), calendar position,
-district identity and missingness indicators.
-
-### 4.3 Validation protocol
+### 4.3 Validation
 
 ```
 Chronological rolling-origin validation
-├── 12 evenly spaced folds across multiple years (not the final 12 origins)
+├── 12 evenly spaced origins per horizon (one target week per origin)
 ├── No random splitting at any stage
 ├── Preprocessing fitted on training rows only
-├── Targets aligned strictly to future weeks
-└── Missing outcomes excluded rather than imputed
+├── Training labels restricted to targets observable by the origin
+└── Inner hyperparameter tuning embargoed at the earliest inner validation origin
 ```
+
+Because each origin scores a single calendar week across all districts, the 12 origins are 12
+dependent target weeks, not 1,750 independent observations. Supplementary analyses therefore add a
+92-week weekly evaluation (2024–2025) and temporal block-bootstrap uncertainty.
 
 ### 4.4 Surge definition
 
-Surge thresholds are **district-specific, training-only 75th-percentile (Q75)** values for the
-target epidemiological week ±2 weeks. Districts with fewer than eight seasonal observations
-fall back to an expanding district history. The 2022 national epidemic is excluded from this
-normal-reference baseline only — it remains in count-model training.
+A surge is an observed count above the district's training-only Q75 for the target epidemiological
+week ±2 weeks (2022 excluded from the reference). Where fewer than eight seasonal observations exist,
+the reference falls back to the district's broader history; this affects 25.0%, 21.1% and 16.7% of
+references at 4, 8 and 12 weeks on the original folds. A warning is a forecast above that same threshold.
 
-The **surge score** is `predicted cases − district threshold`, expressed in cases. It is
-**not** a probability and must not be interpreted as one.
+### 4.5 Models and selection
 
-### 4.5 Model selection
+Four core models: a seasonal historical baseline, a district-specific autoregressive model with
+climate regressors (labelled SARIMAX; the fitted specification is non-seasonal, with a
+regression-only fallback in about 59% of forecasts), and nationally pooled Random Forest and XGBoost.
 
-Four approved candidates were evaluated: **Baseline/Naive**, **SARIMAX**, **Random Forest**
-and **XGBoost**.
-
-- *Count selection*: lowest WAPE, with RMSE as fallback where WAPE is unavailable.
-- *Surge selection*: sensitivity ≥ 0.60 and specificity ≥ 0.40 preferred, then ranked by F2,
-  sensitivity, PR-AUC, precision and specificity.
-- **Accuracy is never used as a selection criterion**, because surge weeks are rare and a model
-  can appear accurate while missing most surges.
-
-Separate class-balanced classifiers were also trained (Random Forest with class weights,
-XGBoost with `scale_pos_weight`; SMOTE was not used). These generated excessive false alerts,
-so the operational count-versus-seasonal-threshold method was selected. Classifier results are
-retained in the repository evidence rather than omitted.
+Surge warning is the primary objective. Count WAPE is reported as a supporting measure and is not
+used on its own to select the warning approach.
 
 ---
 
 ## 5. Results
 
-**Random Forest** is selected for both count prediction and operational surge warning at all
-three horizons.
+All results are retrospective development results on 2020–2025 data, after correction.
 
-| Horizon | MAE | RMSE | WAPE | R² | Sensitivity | Specificity | Precision | F1 | F2 | PR-AUC |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **4 weeks** | 393.75 | 627.54 | 34.31% | 0.695 | 73.3% | 71.9% | 53.7% | 62.0% | 68.3% | 0.626 |
-| **8 weeks** | 462.76 | 693.42 | 38.56% | 0.656 | 73.1% | 66.5% | 51.4% | 60.4% | 67.4% | 0.607 |
-| **12 weeks** | 460.33 | 701.07 | 39.64% | 0.636 | 72.8% | 69.3% | 52.7% | 61.1% | 67.6% | 0.609 |
+### 5.1 Original twelve-origin evaluation (corrected)
 
-Under the same validation protocol, Random Forest reduced WAPE relative to the naive baseline
-by **29.72%, 20.45% and 16.13%** at 4, 8 and 12 weeks respectively.
+| Horizon | Model | WAPE | Recall | Precision | F2 | False alerts | Missed surges |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 4 weeks | **Random Forest** | 34.31% | 73.2% | 54.3% | 0.685 | 331 | 144 |
+| 4 weeks | XGBoost | 36.44% | 69.0% | 50.4% | 0.642 | 365 | 167 |
+| 8 weeks | **Random Forest** | 39.74% | 70.9% | 52.1% | 0.661 | 373 | 166 |
+| 8 weeks | XGBoost | 40.35% | 68.7% | 50.4% | 0.640 | 386 | 179 |
+| 12 weeks | **Random Forest** | 39.64% | 72.8% | 53.1% | 0.677 | 359 | 152 |
+| 12 weeks | XGBoost | 39.21% | 70.6% | 53.9% | 0.665 | 337 | 164 |
 
-*Interpretation note: WAPE reduction measures relative error improvement against the naive
-benchmark; it is a separate quantity from the detection rates reported in the same table.*
+Each horizon has about 1,750 scored district-weeks. Against the seasonal baseline (WAPE 48.82%,
+48.48% and 47.27%), Random Forest reduces count error by 29.7%, 18.0% and 16.1% relative to that
+baseline. At 12 weeks XGBoost has the lower point WAPE; the paired difference from Random Forest is
+not statistically established. Random Forest has the higher F2 at every horizon.
 
-### District-level performance
+**Reading F2 correctly.** About 31% of district-weeks are surges under this definition, so a policy
+that alerts every district every week already scores F2 ≈ 0.69, 0.71 and 0.70. The Random Forest
+warning's F2 is close to that reference while alerting on about 41–44% of district-weeks, with
+roughly half its alerts false. F2 should be read together with precision, alert rate and false-alert
+workload.
 
-Random Forest and XGBoost are national-pooled models that nevertheless produce, and are
-evaluated on, predictions for every district. Headline metrics are pooled across all
-district-week predictions; district-level distributions are reported alongside them.
+### 5.2 Equal-information weekly evaluation (92 target weeks, 2024–2025)
 
-| Horizon | Median district WAPE | Interquartile range | Districts > 50% WAPE | Districts with negative R² |
+When every method receives case data only up to one week before the origin:
+
+| Horizon | Random Forest WAPE | Recent 4-week mean WAPE | Persistence WAPE | Seasonal baseline WAPE |
 | --- | --- | --- | --- | --- |
-| 4 weeks | 35.6% | 30.1–42.6% | 18 | 72 |
-| 8 weeks | 40.2% | 32.2–49.3% | 36 | 81 |
-| 12 weeks | 40.0% | 33.6–50.8% | 39 | 72 |
+| 4 weeks | 25.21% | 28.32% | 28.81% | 42.40% |
+| 8 weeks | 29.25% | 32.98% | 34.38% | 42.39% |
+| 12 weeks | 31.95% | 35.39% | 37.61% | 42.39% |
 
-Each district contributes only 12 validation predictions per horizon, so district-level R² and
-sensitivity are statistically unstable. Pooled metrics are therefore reported as primary,
-supplemented by WAPE distributions and confusion-count denominators. A district showing 100%
-sensitivity on a single event is **not** treated as strong evidence.
+Random Forest has lower count error than these simple forecasts, with temporal-block intervals
+favouring it. Its warning recall advantage over the simple forecasts is smaller and not established
+by the count result.
+
+### 5.3 Climate contribution
+
+Removing all climate predictors from Random Forest (fixed parameters, original folds) raises WAPE by
+about 1.0, 1.0 and 1.3 percentage points at 4, 8 and 12 weeks, but every interval includes zero. An
+exploratory, post hoc 92-week comparison favours climate by about 1.0 and 0.9 points at 4 and 12 weeks
+(intervals exclude zero) and is inconclusive at 8 weeks. Climate lags are measured from the forecast
+origin, so at 12 weeks the shortest climate lag is 16 weeks before the target. These are predictive
+associations, not causal effects.
+
+### 5.4 Direct surge classifiers
+
+Class-balanced Random Forest and XGBoost surge classifiers were re-evaluated with corrected,
+chronologically valid cutoff selection. Their F2 (about 0.70–0.73) exceeds the count-based warning only
+by alerting on 82–97% of district-weeks, close to the always-alert reference, with about three times as
+many false alerts. They were not adopted; the corrected count-based Random Forest warning is retained
+as the research baseline at all three horizons.
+
+### 5.5 Same-data published-method benchmark
+
+Adapted Zinszer-inspired ARIMAX, Teklehaimanot-inspired Poisson distributed-lag and two sensitivity
+models were evaluated on identical folds. These are adaptations, not replications. After correction,
+the adapted ARIMAX has a slightly lower point WAPE than Random Forest at 8 weeks (38.69% vs 39.74%),
+with a paired interval that includes zero; Random Forest retains the higher F2.
+
+---
+
+## Corrections, October 2026
+
+Corrected in `app/` (commit history records each change):
+
+- **Inner tuning leakage:** the hyperparameter tuning split could use training labels dated after the
+  inner validation origins; labels are now embargoed at the earliest inner origin. This changed the
+  8-week Random Forest parameters (WAPE 38.56% → 39.74%) and the 12-week XGBoost result.
+- **Interpolation timing:** an interpolated predictor now requires its right-hand anchor to be
+  observed by the forecast origin.
+- **SARIMAX calendar:** absent weeks are kept as missing slots instead of compressing the series.
+- **Metric consistency:** tie-aware average precision; one ranking score (forecast minus threshold)
+  for every model; Brier score only for true probabilities.
+- **Reporting:** district surge metrics now follow the operational count-threshold method; the
+  explainability API reports F2 as the surge selection metric; the methods report no longer
+  describes the rejected classifier as operational.
+
+Earlier statements that Random Forest was selected in every position, that the model "detects 73%
+of surge weeks and cuts forecast error by 30%", and that the warning is well balanced are superseded
+by the corrected results above.
 
 ---
 
@@ -247,32 +274,20 @@ app/
 ├── __init__.py              Application factory, blueprint registration
 ├── config.py                PostgreSQL-only configuration; fails fast if unset
 ├── models/                  SQLAlchemy models (research contract + session identity)
-├── blueprints/
-│   ├── auth/                Live DHIS2 credential verification
-│   ├── dashboard/           Dashboard page and dashboard APIs
-│   ├── explainability/      Explainability and system-evidence APIs
-│   ├── lifecycle_api/       Read-only surveillance and data-quality APIs
-│   ├── dhis2 · preprocessing · climate · modelling · forecasts · howitworks
-│   ├── reports/             Report generation (PDF, Excel, CSV, print HTML)
-│   └── settings/            Settings and governance page
+├── blueprints/              auth, dashboard, explainability, lifecycle_api, reports, settings, …
 ├── services/                Evidence, modelling and presentation services
 ├── templates/               Jinja templates
 └── static/                  CSS, JavaScript, vendored Chart.js and Leaflet
-tests/                       26 test modules — unit, contract, security, regression
+tests/                       31 test modules — unit, contract, security, regression
+research_comparisons/        Same-data published-method benchmark
+research_extensions_2026_10/ Corrected re-evaluation and supervisor-response analyses
+research_extensions_2026_10_round2/  Surge-closure analyses, methods and verification records
 docs/                        Handover, retraining report, API reference
 migrations/                  Alembic migrations
 ```
 
-**Design principles**
-
-- *Evidence over assertion* — statuses, counts and model selections are derived from validated
-  artifacts at runtime. Nothing analytical is hardcoded in the interface.
-- *Fail closed* — missing, malformed or inconsistent evidence produces a controlled
-  unavailable response rather than a partially authoritative page.
-- *Read-only serving* — no HTTP request performs a database write; this is asserted by
-  capturing SQL statements during tests.
-- *Offline capable* — Chart.js and Leaflet are vendored locally; no CDN, external font or
-  map-tile request is made at runtime.
+Design principles: evidence over assertion, fail closed on missing or malformed evidence, read-only
+serving (asserted in tests), and offline operation with vendored front-end libraries.
 
 ---
 
@@ -280,15 +295,17 @@ migrations/                  Alembic migrations
 
 | Module | Description |
 | --- | --- |
-| **Dashboard** | National and district views, weekly observed series with target-week forecast and threshold markers, choropleth risk map joined on `district_id`, paginated and searchable district risk table |
-| **Surveillance Data** | Coverage, received versus missing district-weeks, explicit-zero accounting, reporting completeness |
-| **Data Quality & Preparation** | Eight-stage lifecycle with evidence-derived leakage controls |
-| **Climate Signals** | Rainfall, temperature and humidity with 4/8/12-week lags, national and district context |
-| **Model Evaluation** | Count and surge metrics for all four models, selection rules, validation method, feature importance (native and permutation), threshold interpretation |
-| **Forecasts & Risk** | Issue, horizon and district filters with a per-district interpretation panel |
-| **How It Works** | Pipeline status derived from published evidence |
-| **Reports & Exports** | Seven report products in PDF, Excel, CSV and print-friendly HTML |
-| **Settings & Governance** | Eleven read-only governance sections including live integrity verification |
+| **Dashboard** | National and district views, target-week forecast against threshold, choropleth risk map, searchable district risk table |
+| **Surveillance Data** | Coverage, received versus missing district-weeks, reporting completeness |
+| **Data Quality & Preparation** | Lifecycle stages with leakage controls |
+| **Climate Signals** | Rainfall, temperature and humidity with 4/8/12-week lags |
+| **Model Evaluation** | Count and surge metrics for the four core models, selection rules, validation method, feature importance |
+| **Forecasts & Risk** | Issue, horizon and district filters with an interpretation panel |
+| **Reports & Exports** | Report products in PDF, Excel, CSV and print HTML |
+| **Settings & Governance** | Read-only governance sections including integrity verification |
+
+The dashboard displays a single frozen research issue (2025W52). It does not refresh data, retrain
+models or confirm outbreaks, and it has not been evaluated with district health users.
 
 ---
 
@@ -297,7 +314,7 @@ migrations/                  Alembic migrations
 ### Prerequisites
 
 - Python 3.12 (3.11+ supported)
-- PostgreSQL 14 or later — the application is PostgreSQL-only; there is no SQLite fallback
+- PostgreSQL 14 or later (PostgreSQL only; no SQLite fallback)
 - A DHIS2 account with read access to the relevant data elements
 
 ### Setup
@@ -321,18 +338,10 @@ python run.py                               # http://127.0.0.1:5000
 ### Configuration
 
 All configuration is supplied through environment variables; see [`.env.example`](.env.example).
-The application fails fast if `DATABASE_URL` is missing or is not a PostgreSQL URL, and
-requires `SECRET_KEY` outside local development.
-
-DHIS2 credentials do not belong in `.env` — they are entered at sign-in.
-The configured DHIS2 URL must use HTTPS and certificate verification must remain enabled.
-Set `SESSION_COOKIE_SECURE=true` when serving the dashboard to browsers over HTTPS; leave it
-false only for the default localhost HTTP workflow.
-
-**Authentication.** Sign-in verifies your DHIS2 account live against `/api/me` and keeps only
-the returned non-secret identity for the browser session, with reauthentication after 30
-minutes. Signing in does not pull new surveillance data; the dashboard serves the published
-production issue week.
+The application fails fast if `DATABASE_URL` is missing or is not a PostgreSQL URL, and requires
+`SECRET_KEY` outside local development. DHIS2 credentials are entered at sign-in, verified live
+against `/api/me`, and never stored. The configured DHIS2 URL must use HTTPS with certificate
+verification enabled. Set `SESSION_COOKIE_SECURE=true` when serving over HTTPS.
 
 ---
 
@@ -345,95 +354,68 @@ python -m compileall app tests
 python -m unittest -v tests.test_dhis2_client tests.test_modelling_dataset tests.test_model_performance tests.test_repository_hardening
 ```
 
-Authorized maintainers with the governed PostgreSQL database and complete local `data/`
-directory can run the full verification suite:
+Maintainers with the governed PostgreSQL database and complete local `data/` directory can run the
+full suite:
 
 ```bash
 python -m unittest discover -s tests -v
 ```
 
-The full suite covers analytical contracts,
-authentication and session security, API response contracts, export security (formula
-injection, path traversal, temporary-file cleanup), read-only database behaviour,
-scientific-honesty assertions and production-integrity fingerprinting.
+The research analyses carry their own verification: preserved-file hash checks, independent
+recomputation of thresholds and metrics from saved predictions, representative refits, and focused
+scientific tests (see `research_extensions_2026_10_round2/VERIFICATION_REPORT.md`). These are
+internal cross-checks, not independent replication.
 
-Production integrity is verified by a deterministic SHA-256 forecast fingerprint recomputed on
-demand, together with row, district, null, duplicate and composite-key checks.
-
-> Database- and artifact-backed tests intentionally fail closed when required governed
-> evidence is missing. Passing the public source-only gate is therefore not evidence that the
-> private production outputs were reproduced.
+> Database- and artifact-backed tests intentionally fail closed when governed evidence is missing.
+> Passing the public gate is not evidence that the private results were reproduced.
 
 ---
 
 ## 10. Data availability
 
-The `data/` directory is **not distributed with this repository**. It contains Uganda Ministry
-of Health HMIS 033b surveillance records, DHIS2 metadata, CHIRPS and ERA5-Land raster
-products, the derived modelling dataset and fitted model binaries — approximately 9 GB in
-total.
+The `data/` directory, row-level predictions, model binaries and research run outputs are **not
+distributed**. They derive from Uganda Ministry of Health HMIS 033b surveillance records, which are
+governed by the Ministry and are not the author's to redistribute; some diagnostic artifacts also
+embed local paths, and the volume exceeds repository limits.
 
-It is withheld because:
+A later-period (2026) evaluation was carried out locally; its results are withheld from this
+repository pending research approvals.
 
-1. Surveillance records are governed by the Uganda Ministry of Health and are not the author's
-   to redistribute;
-2. DHIS2 metadata describes internal organisational structure;
-3. Some diagnostic artifacts embed local filesystem paths;
-4. The volume substantially exceeds repository size limits.
-
-Source data may be requested from the respective custodians: the Uganda Ministry of Health
-(HMIS/DHIS2), the [Climate Hazards Center](https://www.chc.ucsb.edu/data/chirps) (CHIRPS) and
-the [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/) (ERA5-Land).
+Source data may be requested from the custodians: the Uganda Ministry of Health (HMIS/DHIS2), the
+[Climate Hazards Center](https://www.chc.ucsb.edu/data/chirps) (CHIRPS) and the
+[Copernicus Climate Data Store](https://cds.climate.copernicus.eu/) (ERA5-Land).
 
 ---
 
 ## 11. Limitations
 
-- **Surveillance dependence.** Forecasts inherit the quality of routine reporting. Weeks with
-  low completeness may understate true burden.
-- **Completeness is not incidence.** HMIS 033b reporting completeness measures form
-  submission, not malaria burden.
-- **Association, not causation.** Climate variables are predictive inputs. The pipeline
-  computes no climate–malaria correlation and claims no causal effect or best-correlating lag.
-- **Count rather than incidence.** The model predicts weekly confirmed case counts. Population
-  and incidence are not outcomes or predictors in the production modelling contract, so
-  comparisons between differently sized districts require epidemiological interpretation.
-- **Target-week only.** Models predict the specified target week; intermediate weekly forecasts
-  are not generated, and no prediction interval is displayed unless the selected model
-  publishes one.
-- **Pooled importance.** Feature importance is national-pooled, model-specific and predictive.
-  It does not describe an individual district and does not explain any single production
-  forecast; per-prediction production explanations are unavailable.
-- **District instability.** Twelve validation predictions per district per horizon are
-  insufficient for stable district-level R² or sensitivity.
-- **Not comparable across protocols.** Earlier and current count metrics are not directly
-  comparable, because validation design, data cleaning and surge labelling all changed. The
-  stricter multi-year evaluation produces higher WAPE than a final-period evaluation would.
-- **Retrospective evaluation.** All validation to date is retrospective; prospective and
-  external validation are the natural next step.
-
-### Recommended further work
-
-Confidence intervals for all reported metrics; deeper district-performance distribution
-analysis; predictor ablation studies; threshold sensitivity analysis; and prospective and
-external validation in an operational setting.
+- **Retrospective and limited in time.** Twelve target weeks per horizon in the main evaluation; all
+  2020–2025 data have been inspected during development. No prospective validation has been done.
+- **Constructed surge labels.** Surges are threshold exceedances, not adjudicated outbreaks, and the
+  threshold relies on a broader-history fallback for many early references.
+- **Warning workload.** About half of alerts are false and no acceptable workload has been
+  established with intended users.
+- **F2 is not sufficient.** At this prevalence an always-alert policy scores F2 ≈ 0.70.
+- **Counts, not incidence.** No population-standardised incidence is modelled; comparisons between
+  districts of different size describe reported burden.
+- **Surveillance dependence.** Forecasts inherit reporting completeness and data-quality limits.
+- **Association, not causation.** Climate and feature-importance results describe prediction only.
+- **Pooled metrics.** National results hide district variation; district-level metrics rest on few
+  target weeks and are unstable.
+- **Unvalidated prototype.** The dashboard has not undergone usability or operational evaluation.
 
 ---
 
 ## 12. Ethics and responsible use
 
-This system was developed for academic research and processes aggregate district-week counts;
-no patient-identifiable records are stored in this repository. Data-custodian authorization,
-institutional ethics review and any waiver or exemption must nevertheless be determined and
-documented by the Uganda Ministry of Health and the relevant university review bodies. The
-repository itself does not establish an ethics exemption.
+This system processes aggregate district-week counts; no patient-identifiable records are stored in
+this repository. Research Ethics Committee approval and written Ministry of Health research
+authorisation are **pending** at the time of writing; this repository does not establish an ethics
+exemption or publication clearance.
 
-Forecasts are decision-support outputs: a risk classification identifies districts warranting
-review and early action, and is intended to inform epidemiological judgement rather than
-replace it or trigger automated action.
-
-Use of Ministry of Health identifiers and branding describes the data custodian and research
-context; it does not by itself imply official endorsement of this prototype.
+Forecasts are decision-support outputs: an elevated risk category identifies districts for review and
+does not confirm an outbreak or trigger automatic action. Ministry of Health identifiers describe the
+data custodian and context and do not imply official endorsement.
 
 ---
 
@@ -441,31 +423,30 @@ context; it does not by itself imply official endorsement of this prototype.
 
 ```
 .
-├── app/                          Flask application (see §6)
+├── app/                               Flask application (see §6)
 ├── docs/
-│   ├── HANDOVER.md               Architecture, routes, data dictionary, operations
-│   ├── RETRAINING_CLEANING_REPORT.md   Cleaning, retraining and validation report
-│   └── explainability_api.md     Explainability API reference
-├── migrations/                   Alembic database migrations
-├── tests/                        Test suite (26 modules)
-├── .env.example                  Configuration template (no secrets)
-├── requirements.txt              Core dependencies
-├── requirements-models.txt       Modelling dependencies
-├── requirements-climate.txt      Climate processing dependencies
-└── run.py                        Entry point
+│   ├── HANDOVER.md                    Architecture, code corrections and operations
+│   ├── RETRAINING_CLEANING_REPORT.md  Cleaning, retraining and validation report
+│   └── explainability_api.md          Explainability API reference
+├── research_comparisons/              Same-data published-method benchmark (code and methods)
+├── research_extensions_2026_10/       Corrected re-evaluation scripts and methods
+├── research_extensions_2026_10_round2/  Surge-closure scripts, methods, verification and revision plan
+├── migrations/                        Alembic database migrations
+├── tests/                             Test suite (31 modules)
+├── .env.example                       Configuration template (no secrets)
+├── requirements*.txt                  Core, modelling and climate dependencies
+└── run.py                             Entry point
 ```
 
 ---
 
 ## 14. Citation
 
-If you reference this work, please cite:
-
 ```bibtex
 @mastersthesis{omoding_malaria_ews,
   author  = {Omoding, Isaac},
-  title   = {District-Level Malaria Surge Prediction and Early Warning
-             Using Climate Data in Uganda},
+  title   = {Climate-Driven Machine Learning Prediction for District-Level
+             Malaria Surges in Uganda},
   school  = {Uganda Christian University},
   year    = {2026},
   type    = {{MSc} Dissertation},
@@ -478,14 +459,14 @@ If you reference this work, please cite:
 
 ## Acknowledgements
 
-Surveillance data are collected by health facilities across Uganda and curated through the
-Ministry of Health HMIS. Rainfall estimates are provided by the Climate Hazards Center
-(CHIRPS) and reanalysis climate variables by the Copernicus Climate Data Store (ERA5-Land).
-District biostatisticians provided the confirmations underpinning the reporting-error registry.
+Surveillance data are collected by health facilities across Uganda and curated through the Ministry
+of Health HMIS. Rainfall estimates are provided by the Climate Hazards Center (CHIRPS) and reanalysis
+variables by the Copernicus Climate Data Store (ERA5-Land). District biostatisticians provided the
+confirmations underpinning the reporting-error register.
 
 ---
 
 <p align="center">
   <sub>MSc Data Science &amp; Analytics · Uganda Christian University ·
-  Climate-informed malaria early warning for 146 districts</sub>
+  District malaria surge early warning for 146 districts</sub>
 </p>
